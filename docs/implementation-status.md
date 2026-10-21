@@ -57,7 +57,7 @@
 
 ### タグpushによるRelease登録（2026-10-21追記）
 
-- `v`+VERSIONのタグをpushすると、3 OSテストと6対象のパッケージ成功後にRelease公開ジョブを実行。通常のブランチpush／PR／手動実行はArtifacts作成のみ。
+- VERSIONと同じ名前のタグ（`v`なし）をpushすると、3 OSテストと6対象のパッケージ成功後にRelease公開ジョブを実行。通常のブランチpush／PR／手動実行はArtifacts作成のみ。
 - Releaseジョブだけにcontents: writeを付与。同じ実行の6対象のZIPとSHA256を取得し、版・ファイルの存在・SHA256・ZIP整合性を検査してから、gh release create --verify-tag --generate-notesで公開。既存Releaseは上書きしない。
 - actionlint v1.7.12とBash構文検査成功。検証用ZIPと模擬ghで12添付の引数を確認。タグ不一致・添付不足・チェックサム不一致・壊れたZIPでghを呼ばず停止することを確認。ネットワークへの公開操作は行っていない。
 - 署名修正を含む作業ツリーの変更は未コミット・未push。以前のCI成功は初回コミットに対する結果で、今回の変更の成功を示すものではない。

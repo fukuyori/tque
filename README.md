@@ -138,9 +138,9 @@ In GitHub, open **Actions → test-and-package → a successful run → Artifact
 
 ### Publish a version-tag release
 
-Push a tag named `v` followed by the exact contents of `VERSION`, such as `v0.2.0` for `0.2.0`. Commit and push the intended source and workflow changes before tagging that commit. A mismatched tag is rejected before testing or packaging. The current format is `vMAJOR.MINOR.PATCH`; prerelease suffixes are not accepted.
+Push a tag named exactly as the contents of `VERSION`, such as `0.2.0`. Commit and push the intended source and workflow changes before tagging that commit. A mismatched tag is rejected before testing or packaging. The format is `MAJOR.MINOR.PATCH` without a `v` prefix; prerelease suffixes are not accepted.
 
-After all three OS test jobs and all six packaging jobs succeed, the release job downloads the artifacts from that same run, checks each ZIP and SHA256, and publishes a release titled `tque v0.2.0` with automatically generated notes. The assets are six ZIP files and six `.zip.sha256` files; download them directly from the repository's Releases page. These are application binaries, not signed installers.
+After all three OS test jobs and all six packaging jobs succeed, the release job downloads the artifacts from that same run, checks each ZIP and SHA256, and publishes a release titled `tque 0.2.0` with automatically generated notes. The assets are six ZIP files and six `.zip.sha256` files; download them directly from the repository's Releases page. These are application binaries, not signed installers.
 
 Only a **tag push** publishes a release. Branch pushes, pull requests, and manual workflow dispatch only build artifacts. The release job alone receives `contents: write` through the built-in `GITHUB_TOKEN`; no personal access token is needed. An existing release is not overwritten on reruns. If uploading fails, inspect the existing release/draft and assets before retrying. Tag creation and pushing remain explicit maintainer actions. See [GitHub CLI release creation](https://cli.github.com/manual/gh_release_create).
 

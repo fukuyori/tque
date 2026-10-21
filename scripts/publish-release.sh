@@ -4,8 +4,8 @@ repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 tag=${1:?Release tag is required}
 asset_dir=${2:?Asset directory is required}
 version=$(tr -d '\r\n' < "$repo/VERSION")
-[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$tag" == "v$version" ]] || {
-    echo 'Release tag must equal v followed by VERSION.' >&2; exit 1;
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$tag" == "$version" ]] || {
+    echo 'Release tag must equal VERSION.' >&2; exit 1;
 }
 asset_dir=$(cd -- "$asset_dir" && pwd)
 assets=()

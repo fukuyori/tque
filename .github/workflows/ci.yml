@@ -2,7 +2,7 @@ name: test-and-package
 on:
   push:
     branches: ['**']
-    tags: ['v*']
+    tags: ['[0-9]+.[0-9]+.[0-9]+']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -23,8 +23,8 @@ jobs:
         run: |
           version=$(tr -d '\r\n' < VERSION)
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Invalid VERSION' >&2; exit 1; }
-          if [[ "$REF_TYPE" == tag && "$REF_NAME" != "v$version" ]]; then
-            echo 'Tag must equal v followed by VERSION (for example v0.1.0).' >&2
+          if [[ "$REF_TYPE" == tag && "$REF_NAME" != "$version" ]]; then
+            echo 'Tag must equal VERSION (for example 0.2.0).' >&2
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
