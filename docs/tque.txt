@@ -1,0 +1,260 @@
+# ソフトウェア基本設計書: tque
+
+## 1. 概要 (Overview)
+
+### 1.1 プロダクト名称
+
+**`tque`** (Terminal Queue / Task Queue)
+
+### 1.2 目的・コンセプト
+
+* **軽量・高速性**: 本文などの長文情報は持たず、「タイトル」「関係性（親子・依存）」「スケジュール・進捗」のみをミニマルに管理。
+* **デュアルモード**: スクリプトや手早い入力に適した「CLIワンライナー」と、全体の俯瞰・整理に適した「インタラクティブTUI」を単一バイナリで提供。
+* **WBS / キュー思考**: タスクを階層的（親子）に分解し、先行タスクの完了によって後続タスクが消化可能になる依存管理を実現。
+
+### 1.3 開発言語・主要技術スタック
+
+* **言語**: Go (Go 1.22+)
+* **CLIフレームワーク**: `[github.com/spf13/cobra](https://github.com/spf13/cobra)`
+* **TUIフレームワーク**: `[github.com/charmbracelet/bubbletea](https://github.com/charmbracelet/bubbletea)`
+* **スタイリング / 描画**: `[github.com/charmbracelet/lipgloss](https://github.com/charmbracelet/lipgloss)`
+* **ストレージ形式**: JSON (ローカルファイル `~/.tque/tasks.json`)
+
+---
+
+## 2. システム構成・アーキテクチャ
+
+CLIモードとTUIモードで重複コードを発生させないため、データアクセスおよびビジネスロジックを `internal/engine` および `internal/storage` に集約する。
+
+```
+                    [ ターミナル実行: tque ... ]
+                                 │
+                   ┌─────────────┴─────────────┐
+                   ▼                           ▼
+            [ 引数あり (CLI) ]          [ 引数なし / --tui ]
+                   │                           │
+                   ▼                           ▼
+          ┌─────────────────┐         ┌─────────────────┐
+          │  cmd/ (Cobra)   │         │ internal/tui    │
+          │  CLI Handler    │         │ (Bubble Tea)    │
+          └────────┬────────┘         └────────┬────────┘
+                   │                           │
+                   └─────────────┬─────────────┘
+                                 │ 呼出
+                                 ▼
+                   ┌───────────────────────────┐
+                   │   internal/engine (Core)  │
+                   │  - 依存関係DAG検証        │
+                   │  - サブタスク進捗算出     │
+                   │  - フィルタ / ソート      │
+                   └─────────────┬─────────────┘
+                                 │
+                                 ▼
+                   ┌───────────────────────────┐
+                   │   internal/storage        │
+                   │  - JSONエンコード/デコード│
+                   │  - アトミック書き込み     │
+                   │  - 排他制御 (File Lock)   │
+                   └───────────────────────────┘
+
+```
+
+---
+
+## 3. データモデル設計
+
+### 3.1 タスク構造体 (`internal/model/task.go`)
+
+```go
+package model
+
+import "time"
+
+type TaskStatus string
+
+const (
+    StatusTodo TaskStatus = "todo"
+    StatusDone TaskStatus = "done"
+)
+
+type Task struct {
+    ID          int        `json:"id"`
+    Title       string     `json:"title"`
+    Status      TaskStatus `json:"status"`
+    ParentID    *int       `json:"parent_id,omitempty"`   // 親タスクID (nilでルート)
+    DependsOn   []int      `json:"depends_on,omitempty"`  // 先行完了必須のタスクID一覧
+    StartDate   *string    `json:"start_date,omitempty"`  // YYYY-MM-DD 形式
+    DueDate     *string    `json:"due_date,omitempty"`    // YYYY-MM-DD 形式
+    Progress    int        `json:"progress"`              // 0 - 100 (%)
+    CreatedAt   time.Time  `json:"created_at"`
+    CompletedAt *time.Time `json:"completed_at,omitempty"`
+}
+
+```
+
+### 3.2 ストレージ保存先と整合性保持
+
+* **保存パス**: `~/.tque/tasks.json`
+* **採番仕様**: 現在のデータ内の `max(ID) + 1` を自動採番（欠番再利用はしない）。
+* **保存処理**:
+1. `~/.tque/tasks.json.tmp` に書き込み。
+2. `os.Rename` を用いてアトミックに上書き置換。
+3. `~/.tque/lock` ファイルによるロック機構で多重書き込み競合を防止。
+
+
+
+---
+
+## 4. コマンドライン仕様 (CLI)
+
+### 4.1 コマンド一覧
+
+| コマンド | 引数・主要フラグ | 処理内容 |
+| --- | --- | --- |
+| `tque` | なし (または `--tui`) | TUIダッシュボードを起動 |
+| `tque add` | `<title>`<br>
+
+<br>`-s, --start <date>`<br>
+
+<br>`-d, --due <date>`<br>
+
+<br>`-p, --progress <0-100>`<br>
+
+<br>`--parent <id>`<br>
+
+<br>`--dep <id...>` | 新規タスクの登録 |
+| `tque edit` | `<id>`<br>
+
+<br>`-t, --title <str>`<br>
+
+<br>`-s, --start <date>`<br>
+
+<br>`-d, --due <date>`<br>
+
+<br>`-p, --progress <0-100>`<br>
+
+<br>`--parent <id>`<br>
+
+<br>`--dep <id...>` | 既存タスクの属性更新 (`none` 指定で解除) |
+| `tque done` | `<id>` | タスクを完了にする (`status: done`, `progress: 100`) |
+| `tque undone` | `<id>` | タスクを未完了に戻す (`status: todo`) |
+| `tque rm` | `<id>` (`--cascade`) | タスクを削除 (子タスクがある場合は `--cascade` が必要) |
+| `tque ls` | `--tree`, `--all`, `--blocked`, `--json` | タスク一覧の出力 |
+
+### 4.2 コマンド実行例
+
+```bash
+# タスク追加
+$ tque add "全体設計" -s today -d +7d
+[+] Created task #1: 全体設計
+
+# 親子関係・依存関係を持つサブタスク追加
+$ tque add "DB設計" --parent 1 -d 2026-10-25
+[+] Created task #2: DB設計 (parent: #1)
+
+$ tque add "API実装" --parent 1 --dep 2
+[+] Created task #3: API実装 (parent: #1, depends_on: [#2])
+
+# 進捗更新
+$ tque edit 2 -p 80
+[*] Updated task #2 (progress: 80%)
+
+# ツリー一覧表示
+$ tque ls --tree
+1 [ ] 全体設計                     [■■■■░░░░░░ 40%] today -> +7d
+  ├── 2 [ ] DB設計                 [■■■■■■■■░░ 80%] -> 10/25
+  └── 3 [ ] API実装 (blocked by #2) [░░░░░░░░░░  0%]
+
+```
+
+---
+
+## 5. ターミナルUI仕様 (TUI)
+
+### 5.1 画面レイアウト
+
+シングルペイン構成とし、全幅でタスクツリー、進捗、スケジュールを視覚化する。
+
+```text
+┌─ tque ───────────────────────────────────────────────────────────────────┐
+│ > 1 [ ] 全体設計                     [■■■■░░░░░░ 40%] 10/21 -> 10/28      │
+│   ├── 2 [ ] DB設計                   [■■■■■■■■░░ 80%] -> 10/25            │
+│   └── 3 [ ] API実装   (blocked by #2)                                     │
+│     4 [x] 要件定義完了                                                    │
+│                                                                          │
+├──────────────────────────────────────────────────────────────────────────┤
+│ [a] Add  [A] Subtask  [e] Rename  [s] Start  [d] Due  [+/-] Prog  [q] Quit│
+└──────────────────────────────────────────────────────────────────────────┘
+
+```
+
+### 5.2 キーバインディング一覧
+
+| キー | 動作 | 詳細 |
+| --- | --- | --- |
+| `j` / `k` (または `↑` / `↓`) | カーソル移動 | リスト内の選択行を移動 |
+| `Space` | 完了トグル | `[ ]` と `[x]` の切り替え (完了時は自動で progress=100) |
+| `+` / `-` | 進捗増減 | 選択中タスクの進捗率を 10% 単位で加減 |
+| `a` | ルートタスク追加 | 最下行プロンプトに入力欄を表示 |
+| `A` (Shift+A) | サブタスク追加 | 選択中タスクを親（ParentID）として追加 |
+| `e` | タイトル編集 | 選択中タスクの名前をインライン編集 |
+| `s` | 開始日設定 | 日付プロンプト (`today`, `+3d`, `YYYY-MM-DD`, 空欄で解除) |
+| `d` | 期日設定 | 日付プロンプト (開始日と同様) |
+| `l` | 依存タスク設定 | 先行必須タスクIDの指定・解除 |
+| `x` (または `Delete`) | タスク削除 | 確認プロンプト表示後に削除 |
+| `q` / `Ctrl+C` | 終了 | 変更を自動保存して終了 |
+
+---
+
+## 6. ロジック・整合性ルール
+
+1. **循環依存の検知 (DAG Validation)**:
+* 依存関係（`DependsOn`）および親子関係（`ParentID`）を設定・更新する際、閉路（A → B → A など）が発生しないか深さ優先探索（DFS）で検証。閉路を検知した場合はエラーを返して更新を遮断。
+
+
+2. **自己参照の禁止**:
+* `ParentID == ID` または `DependsOn` に自身のIDが含まれる指定は拒否。
+
+
+3. **着手不可 (Blocked) 判定**:
+* `DependsOn` に含まれるすべてのタスクが `StatusDone` になっていない場合、当該タスクは着手不可（Blocked）状態とし、TUI上で警告表示・色分けを行う。
+
+
+4. **進捗のロールアップ (オプション連動)**:
+* 子タスクを持つ親タスクで、親自身の進捗が手動で固定されていない場合、配下の子タスクの進捗率の平均値を自動計算して親の進捗として表示。
+
+
+
+---
+
+## 7. ディレクトリ・パッケージ構成
+
+```text
+tque/
+├── cmd/
+│   ├── root.go          # Cobraルート定義 (引数判定: CLI実行 or TUI起動)
+│   ├── add.go           # tque add
+│   ├── edit.go          # tque edit
+│   ├── done.go          # tque done / undone
+│   ├── rm.go            # tque rm
+│   └── ls.go            # tque ls
+├── internal/
+│   ├── model/
+│   │   └── task.go      # Task構造体、ステータス、バリデーション
+│   ├── engine/
+│   │   ├── dag.go       # 循環参照チェック、依存関係解決
+│   │   ├── tree.go      # 階層ツリー構造の構築とトラバース
+│   │   └── date.go      # today, +3d などの相対日付パース処理
+│   ├── storage/
+│   │   ├── json.go      # 読み書き・アトミック保存
+│   │   └── lock.go      # ファイル排他制御
+│   └── tui/
+│       ├── model.go     # Bubble Tea Model
+│       ├── update.go    # キーイベント処理
+│       ├── view.go      # Lip Gloss レイアウト描画
+│       └── prompt.go    # インライン入力ハンドラ
+├── go.mod
+├── go.sum
+└── main.go              # cmd.Execute() 呼び出し
+
+```

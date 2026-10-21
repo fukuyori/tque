@@ -1,0 +1,6 @@
+# Shell scripts must remain executable by Unix shells after a Windows checkout.
+*.sh text eol=lf
+# Two trailing spaces are intentional Markdown hard line breaks.
+*.md whitespace=-blank-at-eol
+# Preserve upstream license bytes and their recorded SHA256 values.
+third-party-licenses/** -text -whitespace

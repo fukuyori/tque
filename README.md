@@ -1,0 +1,186 @@
+# tque
+
+[English](README.md) | [日本語](README.ja.md)
+
+tque is a terminal task manager with a CLI and an interactive TUI in one executable. Organize tasks into a hierarchy, track dependencies, set start and due dates, and manage manual or automatic progress.
+
+For everyday use, see the [User Manual](docs/user-manual.md). A [Japanese manual](docs/user-manual.ja.md) is also available.
+
+This is an initial implementation. See the [implementation and verification record (Japanese)](docs/implementation-status.md) for tested platforms and outstanding distribution work. A successful cross-build does not establish that the binary works on its target platform.
+
+Windows targets Windows 11; the installer requires build 22000 or later and does not install on Windows 10.
+
+## Build and run
+
+```powershell
+# Windows / PowerShell
+go test ./...
+go vet ./...
+./scripts/build-release.ps1 -OutputDirectory ./.work/build
+./.work/build/tque-windows-amd64.exe
+```
+
+```sh
+# macOS / Linux, with Go installed
+go test ./...
+go vet ./...
+bash scripts/build-release.sh "$(go env GOOS)" "$(go env GOARCH)" ./.work/build
+./.work/build/tque-$(go env GOOS)-$(go env GOARCH)
+```
+
+The toolchain specified in `go.mod` is Go 1.27.3. Building may download that toolchain and dependencies. Running the application does not require Go, PowerShell, or an external database.
+
+The examples below assume the executable is named `tque` and is on PATH. Otherwise, replace `tque` with its path, such as `.\tque.exe` in PowerShell.
+
+## CLI
+
+```text
+tque add "Prepare release" --due +7d
+tque add "Implement storage" --parent 1 -p 50
+tque add "Integration tests" --parent 1 --dep 2
+tque ls --all --tree
+tque ls --search storage --sort due
+tque ls --due-today
+tque ls --ready --json
+tque edit 2 -p auto
+tque edit 2 --due none
+tque done 2
+tque undone 2
+# Destructive: deletes task 1 and all descendants without a prompt
+tque rm 1 --cascade
+```
+
+Replace example IDs with the IDs returned when you create tasks.
+
+- `ls` shows incomplete tasks by default; `--all` includes completed tasks. `--due-today` includes overdue tasks.
+- `--dep 2,3 --dep 4` accepts multiple dependencies. Editing replaces the entire dependency list.
+- Use `none` with `edit --parent`, `--dep`, `--start`, or `--due` to clear an attribute.
+- `--tree --json` and `--ready --blocked` are invalid combinations.
+- Progress of 100% does not automatically complete a task. Completing a parent does not complete its children.
+- Automatic progress averages the displayed progress of immediate children. `[manual]` indicates a fixed manual value.
+- Incomplete dependencies produce a warning; they do not prevent editing or completion. Tasks referenced by dependencies outside the deletion set cannot be deleted.
+- `rm ID` deletes without a confirmation prompt. `rm ID --cascade` also deletes all descendants. There is no undo.
+- Exit codes: 0 success, 1 task/configuration/storage error, 2 usage error, 3 uncertain save result. For code 3, reload and inspect the result before retrying a change.
+
+A confirmed save followed by a lock cleanup error prints the saved result and `saved; unlock failed`, then exits with code 1. Inspect the data before retrying; do not automatically repeat an addition.
+
+## TUI
+
+Run `tque` without arguments, or use `tque --tui`, in an interactive terminal.
+
+| Key | Action |
+| --- | --- |
+| Up/Down or k/j | Move selection |
+| Left/Right | Collapse, expand, or navigate between parent and child |
+| Enter / Esc | Open full details / return |
+| a / A | Add a root task / child of the selected task |
+| e / s / d / p / l | Edit title / start / due / progress / dependencies |
+| Space | Toggle completed/incomplete |
+| + / - | Change progress by 10 and switch to manual mode |
+| x / Delete | Confirm deletion: y deletes; n, Esc, or Enter cancels |
+| / | Search titles; Left/Right move the text cursor while typing |
+| f | Cycle all → incomplete → due through today → overdue → ready |
+| o | Toggle ID/due-date sort |
+| r | Reload task data |
+| ? | Show help, including the full data path and latest notification |
+| q / Ctrl+C | Quit; q is ordinary text in an input field |
+
+Enter saves an attribute; Esc cancels. Empty date or dependency input clears it. In search input, Enter keeps the query and Esc restores the previous query. Esc in the task list clears only the search, keeping the filter.
+
+Filtered trees retain ancestors as `[context]`; they are excluded from the match count. `!dep` means an incomplete dependency; `!` after a due date marks an overdue incomplete task.
+
+Each change is saved individually. Update keys pressed during a save are ignored. During a save, only Ctrl+C requests exit after success; q is ignored. Conflicts reload the latest data and retain the draft for explicit reconfirmation.
+
+## Storage
+
+On all three operating systems, configuration is read from `~/.tque/config.json`, and the default data directory is `~/.tque`. The application does not create a configuration file automatically.
+
+```json
+{
+  "data_dir": "~/tque-data"
+}
+```
+
+A Windows absolute path can be written as `"D:/tque-data"`. Relative paths are resolved against the configuration directory. Environment variables are not expanded. Invalid configuration stops the operation instead of silently selecting another location. Restart after changing configuration.
+
+The data directory contains `tasks.json`, an OS locking file named `lock`, and a one-generation backup named `tasks.json.backup`. Reads do not create `tasks.json`, but do open or create `lock` for read/write access; reading an existing store requires the corresponding permissions. Do not delete `lock` to release a lock. Concurrent changes through network shares or synchronization software are outside the supported guarantees.
+
+Changing `data_dir` does not move data automatically. Stop all instances before migrating or restoring data. Preserve the complete document, including ID and revision counters. See the [manual](docs/user-manual.md#storage-configuration) for migration and recovery guidance.
+
+## GitHub Actions ZIP builds
+
+The `test-and-package` workflow runs on pushes, pull requests, and manual dispatch. It tests on Windows, macOS, and Linux, then builds ZIPs for six OS/architecture combinations on Ubuntu.
+
+ZIP names use the version in `VERSION`:
+
+```text
+tque-0.1.0-windows-amd64.zip
+tque-0.1.0-windows-arm64.zip
+tque-0.1.0-darwin-amd64.zip
+tque-0.1.0-darwin-arm64.zip
+tque-0.1.0-linux-amd64.zip
+tque-0.1.0-linux-arm64.zip
+```
+
+`darwin` means macOS. Each ZIP contains a directory with the same base name, containing `tque.exe` on Windows or `tque` on macOS/Linux, both README languages, CHANGELOG, the complete docs directory (both manuals, design/review records, verification notes, checklists, and configuration examples), the application license, and dependency licenses. Unix executables are archived with execute permissions.
+
+In GitHub, open **Actions → test-and-package → a successful run → Artifacts**, then download the desired target. Each artifact includes the ZIP and its `.zip.sha256` checksum. The artifact download is a wrapper archive containing the named ZIP; extract that ZIP as well. Builds use the runner's temporary directory rather than placing bare executables in the repository's `dist` directory. This workflow uploads artifacts; it does not create GitHub Releases, tags, or signed installers.
+
+The project's [MIT license](LICENSE) identifies the copyright holder as `fukuyori`. The license prerequisite for ZIP creation is satisfied. Cross-build success is separate from target-machine testing. macOS and ARM64 binaries have not yet been verified on their target machines.
+
+Workflow reference: [setup-go version-file support](https://github.com/actions/setup-go/blob/main/docs/advanced-usage.md) and [upload-artifact documentation](https://github.com/actions/upload-artifact).
+
+The packaging script can also be tested in a Unix environment with Go and `zip` installed:
+
+```sh
+bash scripts/package-zip.sh linux amd64 ./.work/packages
+```
+
+It refuses to overwrite an existing archive. Build and staging directories are temporary; the output directory is explicitly specified. Explicit relative output paths in the build and collection scripts are resolved against the caller's working directory. Verify a downloaded ZIP with `sha256sum -c NAME.zip.sha256` on Linux or `shasum -a 256 -c NAME.zip.sha256` on macOS.
+
+## Shell completion
+
+Generate completion for `powershell`, `bash`, `zsh`, or `fish`. Profiles are not modified automatically.
+
+```powershell
+tque completion powershell | Out-String | Invoke-Expression
+```
+
+```sh
+# Bash
+source <(tque completion bash)
+# Zsh
+autoload -Uz compinit; compinit
+source <(tque completion zsh)
+# Fish
+tque completion fish | source
+```
+
+## Other distribution scripts
+
+`scripts/build-release.ps1` accepts `-OS windows|darwin|linux`, `-Arch amd64|arm64`, and `-OutputDirectory`. The Bash equivalent accepts OS, architecture, and output directory as positional arguments. Existing local build defaults still use `dist`; CI specifies a temporary output directory explicitly.
+
+Distribution includes the project's [LICENSE](LICENSE), with `Copyright (c) 2026 fukuyori`. Packaging scripts reject missing or unresolved licensing information.
+
+The [third-party module list](third-party-licenses/MODULES.txt) identifies the collected dependency versions. Original copyright notices and license texts are retained in the corresponding subdirectories. Package scripts collect these files again from the full module graph, including test/tool dependencies and licenses in subdirectories; this is broader than the modules linked into a particular executable.
+
+On Windows, `scripts/build-installer.ps1` uses Inno Setup. With `-Sign`, it signs the executable, installer, and uninstaller. The current signing script accepts only a certificate-store SHA1 thumbprint in `CODESIGN_CERT`; the actual certificate format to use remains undecided.
+
+```powershell
+./scripts/build-installer.ps1 -Sign `
+  -SignToolPath 'C:/Program Files (x86)/Windows Kits/10/bin/<SDK version>/x64/signtool.exe' `
+  -TimestampUrl 'https://<your RFC3161 timestamp service>'
+```
+
+The default certificate store is CurrentUser; use `-MachineCertificateStore` for LocalMachine. Actual signing, installation, and uninstallation remain unverified. Configuration and task data are retained on uninstall.
+
+For macOS/Linux tar.gz packaging, use `bash scripts/package-release.sh OS ARCH`. It includes licenses and creates a SHA256 checksum. macOS signing and notarization require separate work.
+
+To install an extracted Unix executable into a user-owned directory:
+
+```sh
+mkdir -p "$HOME/.local/bin"
+install -m 755 tque "$HOME/.local/bin/tque"
+```
+
+Add `~/.local/bin` to PATH in your shell configuration if needed. tque does not change shell configuration.

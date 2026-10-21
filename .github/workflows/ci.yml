@@ -1,0 +1,66 @@
+name: test-and-package
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Test
+        shell: pwsh
+        run: |
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go vet ./...
+          exit $LASTEXITCODE
+      - name: Release build
+        shell: pwsh
+        run: |
+          $targetOS = go env GOOS
+          $targetArch = go env GOARCH
+          ./scripts/build-release.ps1 -OS $targetOS -Arch $targetArch -OutputDirectory (Join-Path $env:RUNNER_TEMP 'native-build')
+      - name: Race test (Unix)
+        if: runner.os != 'Windows'
+        run: go test -race ./...
+  package:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [windows, darwin, linux]
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build and create ZIP
+        id: package
+        shell: bash
+        env:
+          TARGET_OS: ${{ matrix.target }}
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          bash scripts/package-zip.sh "$TARGET_OS" "$TARGET_ARCH" "$RUNNER_TEMP/packages"
+          version=$(tr -d '\r\n' < VERSION)
+          echo "name=tque-$version-$TARGET_OS-$TARGET_ARCH" >> "$GITHUB_OUTPUT"
+      - name: Upload ZIP
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: |
+            ${{ runner.temp }}/packages/${{ steps.package.outputs.name }}.zip
+            ${{ runner.temp }}/packages/${{ steps.package.outputs.name }}.zip.sha256
+          if-no-files-found: error
+          compression-level: 0

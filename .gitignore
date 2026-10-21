@@ -1,0 +1,6 @@
+/.work/
+/dist/
+/tque
+/tque.exe
+*.test
+coverage.out
