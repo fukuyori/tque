@@ -1,7 +1,7 @@
 # バージョン更新チェックリスト
 
 - `VERSION`: アプリの版番号を定義する唯一のファイル。main.goがgo:embedで取り込み、インストーラースクリプトも同じファイルを読む。
-- `CHANGELOG.md`: 対応する変更履歴とリリース状態を更新する。
+- `CHANGELOG.md`: 対応する変更履歴を追加する。リリース済みか否かなど、後で古くなる状態は書かない。
 - `README.md`、`README.ja.md`、`docs/implementation-status.md`: 掲載する例と検証結果を確認する。過去の設計・レビュー記録の日付は書き換えない。
 - `docs/user-manual.md`、`docs/user-manual.ja.md`: 英語・日本語両方の対象バージョン、コマンド・キー操作、設定と保存・復旧の説明を実装と照合する。
 - `.github/workflows/ci.yml`、`scripts/package-zip.sh`: ZIP名にVERSION・OS・アーキテクチャが反映され、英語・日本語のREADMEと操作マニュアルが同梱されることを確認する。

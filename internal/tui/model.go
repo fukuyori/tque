@@ -24,6 +24,7 @@ type Model struct {
 	children                       map[int64][]int64
 	selected                       int64
 	width, height, offset, matched int
+	idWidth                        int
 	collapsed                      map[int64]bool
 	filter                         int
 	search, sort, today            string
@@ -82,11 +83,14 @@ func (m *Model) refresh() {
 	m.matched = n
 	m.views = engine.Views(m.doc)
 	m.children = map[int64][]int64{}
+	highest := int64(1)
 	for _, t := range m.doc.Tasks {
+		highest = max(highest, t.ID)
 		if t.ParentID != nil {
 			m.children[*t.ParentID] = append(m.children[*t.ParentID], t.ID)
 		}
 	}
+	m.idWidth = len(strconv.FormatInt(highest, 10))
 	m.rows = nil
 	hide := -1
 	for _, r := range all {

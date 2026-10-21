@@ -19,11 +19,13 @@ type Task struct {
 type Document struct {
 	SchemaVersion int    `json:"schema_version"`
 	Revision      int64  `json:"revision"`
-	NextID        int64  `json:"next_id"`
 	Tasks         []Task `json:"tasks"`
 }
 
-func Empty() Document { return Document{SchemaVersion: 1, NextID: 1, Tasks: []Task{}} }
+// SchemaVersion is the only supported storage format. Version 1 stored next_id.
+const SchemaVersion = 2
+
+func Empty() Document { return Document{SchemaVersion: SchemaVersion, Tasks: []Task{}} }
 
 func (d Document) Clone() Document {
 	d.Tasks = append([]Task{}, d.Tasks...)

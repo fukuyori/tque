@@ -59,6 +59,19 @@ func (s Service) Execute(ctx context.Context, expected *int64, r Request) (Resul
 	return res, err
 }
 
+// NewID returns the highest existing ID plus one, or 1 when there are no tasks.
+// Deleted IDs are not recorded, so removing the highest ID makes it available again.
+func NewID(tasks []model.Task) (int64, error) {
+	highest := int64(0)
+	for _, t := range tasks {
+		highest = max(highest, t.ID)
+	}
+	if highest == math.MaxInt64 {
+		return 0, model.Err("InvalidInput", "task ID limit reached")
+	}
+	return highest + 1, nil
+}
+
 // Apply changes a transaction's private copy. The repository validates before commit.
 func Apply(d *model.Document, r Request, now time.Time) (int64, []int64, error) {
 	idx := -1
@@ -69,11 +82,11 @@ func Apply(d *model.Document, r Request, now time.Time) (int64, []int64, error) 
 		}
 	}
 	if r.Op == "add" {
-		if d.NextID == math.MaxInt64 {
-			return 0, nil, model.Err("InvalidInput", "ID counter exhausted")
+		id, e := NewID(d.Tasks)
+		if e != nil {
+			return 0, nil, e
 		}
-		r.ID = d.NextID
-		d.NextID++
+		r.ID = id
 		d.Tasks = append(d.Tasks, model.Task{ID: r.ID, Status: "todo", ProgressMode: "auto", CreatedAt: now.UTC().Format(time.RFC3339)})
 		idx = len(d.Tasks) - 1
 	} else if idx < 0 {

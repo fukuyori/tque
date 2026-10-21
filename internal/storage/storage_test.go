@@ -187,8 +187,33 @@ func TestMultipleProcesses(t *testing.T) {
 		}
 	}
 	d, e := s.Read(context.Background())
-	if e != nil || len(d.Tasks) != 32 || d.NextID != 33 || d.Revision != 32 {
+	if e != nil || len(d.Tasks) != 32 || d.Revision != 32 {
 		t.Fatal(d, e)
+	}
+	seen := map[int64]bool{}
+	for _, task := range d.Tasks {
+		if task.ID < 1 || task.ID > 32 || seen[task.ID] {
+			t.Fatal("concurrent additions produced unexpected ID", task.ID)
+		}
+		seen[task.ID] = true
+	}
+}
+
+func TestSchemaVersion1IsUnsupported(t *testing.T) {
+	v1 := []byte(`{"schema_version":1,"revision":1,"next_id":2,"tasks":[{"id":1,"title":"old","status":"todo","progress":0,"progress_mode":"auto","created_at":"2026-10-21T00:00:00Z"}]}`)
+	if _, e := Decode(v1); kind(e) != "UnsupportedSchema" {
+		t.Fatal(e)
+	}
+}
+
+func TestSavedDocumentHasNoIDCounter(t *testing.T) {
+	s := &Store{Dir: t.TempDir()}
+	if _, e := svc(s).Execute(context.Background(), nil, addRequest("task")); e != nil {
+		t.Fatal(e)
+	}
+	b := readBytes(t, filepath.Join(s.Dir, "tasks.json"))
+	if bytes.Contains(b, []byte("next_id")) || !bytes.Contains(b, []byte(`"schema_version": 2`)) {
+		t.Fatal(string(b))
 	}
 }
 
@@ -276,10 +301,10 @@ func TestNoOpEmptyDependenciesAndExhaustion(t *testing.T) {
 }
 
 func FuzzDecode(f *testing.F) {
-	f.Add([]byte(`{"schema_version":1,"revision":0,"next_id":1,"tasks":[]}`))
-	f.Add([]byte(`{"schema_version":1,"revision":null,"next_id":1,"tasks":[]}`))
-	f.Add([]byte(`{"schema_version":1,"revision":1,"next_id":2,"tasks":[{"id":1,"title":"seed","status":"todo","progress":0,"progress_mode":"auto","created_at":"2026-10-21T00:00:00Z","due_date":"2026-10-22"}]}`))
-	f.Add([]byte(`{"schema_version":1,"revision":1,"next_id":2,"tasks":[{"id":1,"title":"seed","status":"todo","progress":0,"progress_mode":"auto","created_at":"2026-10-21T00:00:00Z","due_date":"+00000001d"}]}`))
+	f.Add([]byte(`{"schema_version":2,"revision":0,"tasks":[]}`))
+	f.Add([]byte(`{"schema_version":2,"revision":null,"tasks":[]}`))
+	f.Add([]byte(`{"schema_version":2,"revision":1,"tasks":[{"id":1,"title":"seed","status":"todo","progress":0,"progress_mode":"auto","created_at":"2026-10-21T00:00:00Z","due_date":"2026-10-22"}]}`))
+	f.Add([]byte(`{"schema_version":2,"revision":1,"tasks":[{"id":1,"title":"seed","status":"todo","progress":0,"progress_mode":"auto","created_at":"2026-10-21T00:00:00Z","due_date":"+00000001d"}]}`))
 	f.Fuzz(func(t *testing.T, b []byte) {
 		d, e := Decode(b)
 		if e == nil {
@@ -312,7 +337,7 @@ func FuzzDecode(f *testing.F) {
 func TestStoredDatesMustBeAbsolute(t *testing.T) {
 	for _, field := range []string{"start_date", "due_date"} {
 		for _, date := range []string{"+00000001d", "today", "0000-01-01", "2026-02-30", "2026-1-01"} {
-			input := fmt.Sprintf(`{"schema_version":1,"revision":1,"next_id":2,"tasks":[{"id":1,"title":"test","status":"todo","progress":0,"progress_mode":"auto","created_at":"2026-10-21T00:00:00Z","%s":"%s"}]}`, field, date)
+			input := fmt.Sprintf(`{"schema_version":2,"revision":1,"tasks":[{"id":1,"title":"test","status":"todo","progress":0,"progress_mode":"auto","created_at":"2026-10-21T00:00:00Z","%s":"%s"}]}`, field, date)
 			if _, err := Decode([]byte(input)); kind(err) != "CorruptData" {
 				t.Fatalf("%s=%s: %v", field, date, err)
 			}
@@ -360,7 +385,7 @@ func TestSavedResultSurvivesUnlockFailure(t *testing.T) {
 	}
 	s.fault = nil
 	data, err := s.Read(context.Background())
-	if err != nil || len(data.Tasks) != 1 || data.NextID != 2 {
+	if err != nil || len(data.Tasks) != 1 || data.Tasks[0].ID != 1 {
 		t.Fatal(data, err)
 	}
 }

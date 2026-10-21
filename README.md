@@ -115,7 +115,7 @@ A Windows absolute path can be written as `"D:/tque-data"`. Relative paths are r
 
 The data directory contains `tasks.json`, an OS locking file named `lock`, and a one-generation backup named `tasks.json.backup`. Reads do not create `tasks.json`, but do open or create `lock` for read/write access; reading an existing store requires the corresponding permissions. Do not delete `lock` to release a lock. Concurrent changes through network shares or synchronization software are outside the supported guarantees.
 
-Changing `data_dir` does not move data automatically. Stop all instances before migrating or restoring data. Preserve the complete document, including ID and revision counters. See the [manual](docs/user-manual.md#storage-configuration) for migration and recovery guidance.
+Changing `data_dir` does not move data automatically. Stop all instances before migrating or restoring data. Preserve the complete document, including its revision. See the [manual](docs/user-manual.md#storage-configuration) for migration and recovery guidance.
 
 ## GitHub Actions ZIP builds
 
@@ -124,12 +124,12 @@ The `test-and-package` workflow runs on branch pushes, `v*` tag pushes, pull req
 ZIP names use the version in `VERSION`:
 
 ```text
-tque-0.1.0-windows-amd64.zip
-tque-0.1.0-windows-arm64.zip
-tque-0.1.0-darwin-amd64.zip
-tque-0.1.0-darwin-arm64.zip
-tque-0.1.0-linux-amd64.zip
-tque-0.1.0-linux-arm64.zip
+tque-0.2.0-windows-amd64.zip
+tque-0.2.0-windows-arm64.zip
+tque-0.2.0-darwin-amd64.zip
+tque-0.2.0-darwin-arm64.zip
+tque-0.2.0-linux-amd64.zip
+tque-0.2.0-linux-arm64.zip
 ```
 
 `darwin` means macOS. Each ZIP contains a directory with the same base name, containing `tque.exe` on Windows or `tque` on macOS/Linux, both README languages, CHANGELOG, the complete docs directory (both manuals, design/review records, verification notes, checklists, and configuration examples), the application license, and dependency licenses. Unix executables are archived with execute permissions.
@@ -138,9 +138,9 @@ In GitHub, open **Actions → test-and-package → a successful run → Artifact
 
 ### Publish a version-tag release
 
-Push a tag named `v` followed by the exact contents of `VERSION`, such as `v0.1.0` for `0.1.0`. Commit and push the intended source and workflow changes before tagging that commit. A mismatched tag is rejected before testing or packaging. The current format is `vMAJOR.MINOR.PATCH`; prerelease suffixes are not accepted.
+Push a tag named `v` followed by the exact contents of `VERSION`, such as `v0.2.0` for `0.2.0`. Commit and push the intended source and workflow changes before tagging that commit. A mismatched tag is rejected before testing or packaging. The current format is `vMAJOR.MINOR.PATCH`; prerelease suffixes are not accepted.
 
-After all three OS test jobs and all six packaging jobs succeed, the release job downloads the artifacts from that same run, checks each ZIP and SHA256, and publishes a release titled `tque v0.1.0` with automatically generated notes. The assets are six ZIP files and six `.zip.sha256` files; download them directly from the repository's Releases page. These are application binaries, not signed installers.
+After all three OS test jobs and all six packaging jobs succeed, the release job downloads the artifacts from that same run, checks each ZIP and SHA256, and publishes a release titled `tque v0.2.0` with automatically generated notes. The assets are six ZIP files and six `.zip.sha256` files; download them directly from the repository's Releases page. These are application binaries, not signed installers.
 
 Only a **tag push** publishes a release. Branch pushes, pull requests, and manual workflow dispatch only build artifacts. The release job alone receives `contents: write` through the built-in `GITHUB_TOKEN`; no personal access token is needed. An existing release is not overwritten on reruns. If uploading fails, inspect the existing release/draft and assets before retrying. Tag creation and pushing remain explicit maintainer actions. See [GitHub CLI release creation](https://cli.github.com/manual/gh_release_create).
 

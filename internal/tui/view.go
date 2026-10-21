@@ -5,7 +5,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"fmt"
 	"github.com/charmbracelet/x/ansi"
-	"strconv"
 	"strings"
 	"tque/internal/engine"
 	"unicode"
@@ -120,8 +119,7 @@ func (m *Model) row(v engine.View) string {
 	if v.Status == "done" {
 		check = "[x]"
 	}
-	idWidth := len(strconv.FormatInt(max(1, m.doc.NextID-1), 10))
-	prefix := fmt.Sprintf("%s %*d %s ", mark, idWidth, v.ID, check)
+	prefix := fmt.Sprintf("%s %*d %s ", mark, m.idWidth, v.ID, check)
 	tags := ""
 	if v.Context {
 		tags += " [context]"

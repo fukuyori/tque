@@ -35,17 +35,20 @@ func Decode(data []byte) (model.Document, error) {
 	if err := strictjson.Decode(data, &raw); err != nil {
 		return bad(err)
 	}
-	if err := strictjson.Required(data, "schema_version", "revision", "next_id", "tasks"); err != nil {
+	if err := strictjson.Required(data, "schema_version"); err != nil {
 		return bad(err)
 	}
 	var schema int
 	if err := json.Unmarshal(raw["schema_version"], &schema); err != nil {
 		return bad(err)
 	}
-	if schema != 1 {
+	if schema != model.SchemaVersion {
 		return d, model.Err("UnsupportedSchema", "schema_version=%d", schema)
 	}
-	if err := strictjson.Allowed(data, "schema_version", "revision", "next_id", "tasks"); err != nil {
+	if err := strictjson.Required(data, "revision", "tasks"); err != nil {
+		return bad(err)
+	}
+	if err := strictjson.Allowed(data, "schema_version", "revision", "tasks"); err != nil {
 		return bad(err)
 	}
 	if err := strictjson.Decode(data, &d); err != nil {
@@ -173,8 +176,8 @@ func (s *Store) Update(ctx context.Context, expected *int64, mutate func(*model.
 	if e := mutate(&next); e != nil {
 		return d, e
 	}
-	if next.SchemaVersion != d.SchemaVersion || next.Revision != d.Revision || next.NextID < d.NextID {
-		return d, model.Err("InvalidInput", "transaction changed protected counters")
+	if next.SchemaVersion != d.SchemaVersion || next.Revision != d.Revision {
+		return d, model.Err("InvalidInput", "transaction changed protected fields")
 	}
 	if e := engine.Validate(next); e != nil {
 		return d, e

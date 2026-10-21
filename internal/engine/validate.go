@@ -66,16 +66,16 @@ func Date(s string, now time.Time) (string, error) {
 }
 
 func Validate(d model.Document) error {
-	if d.SchemaVersion != 1 {
+	if d.SchemaVersion != model.SchemaVersion {
 		return model.Err("UnsupportedSchema", "schema_version=%d", d.SchemaVersion)
 	}
-	if d.Revision < 0 || d.NextID <= 0 || d.Tasks == nil {
-		return model.Err("InvalidInput", "invalid document counters or tasks")
+	if d.Revision < 0 || d.Tasks == nil {
+		return model.Err("InvalidInput", "invalid document revision or tasks")
 	}
 	byID := map[int64]model.Task{}
 	for _, t := range d.Tasks {
-		if _, ok := byID[t.ID]; ok || t.ID <= 0 || t.ID >= d.NextID {
-			return model.Err("InvalidInput", "invalid/duplicate task ID #%d or next_id", t.ID)
+		if _, ok := byID[t.ID]; ok || t.ID <= 0 {
+			return model.Err("InvalidInput", "invalid/duplicate task ID #%d", t.ID)
 		}
 		byID[t.ID] = t
 		name, err := Title(t.Title)

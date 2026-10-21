@@ -52,7 +52,7 @@ func TestCommands(t *testing.T) {
 	if _, e := run(h, "rm", "1", "--cascade"); e != nil {
 		t.Fatal(e)
 	}
-	if out, e := run(h, "add", "after"); e != nil || !strings.Contains(out, "#3") {
+	if out, e := run(h, "add", "after"); e != nil || !strings.Contains(out, "#1") {
 		t.Fatal(out, e)
 	}
 }

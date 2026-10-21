@@ -2,7 +2,7 @@
 
 [English](user-manual.md) | [日本語](user-manual.ja.md)
 
-Applies to tque 0.1.0.
+Applies to tque 0.2.0.
 
 tque is a terminal task manager. Use commands through its CLI or operate a task list with the keyboard through its TUI. Both interfaces use the same saved data. This manual is in English; it does not change the language of messages displayed by the application.
 
@@ -237,6 +237,12 @@ If another process changed the data, the TUI reloads current data and preserves 
 
 CLI deletion has no interactive confirmation. Check `ls --all --tree` before deleting. A task with children requires `--cascade`. Dependencies from outside the deletion set prevent deletion even with `--cascade`.
 
+### Task IDs
+
+A new task gets the highest existing ID (including completed tasks) plus one, or 1 if there are no tasks.
+
+Example: after deleting 3 from 1, 2, 3, the next new task gets 3.
+
 ### Add and edit options
 
 | Option | Value |
@@ -387,7 +393,7 @@ Keep the original data until verification is complete. Do not copy the lock or t
 
 | File | Purpose |
 | --- | --- |
-| tasks.json | Tasks, ID allocation counter, and revision information |
+| tasks.json | Tasks and revision information |
 | tasks.json.backup | One generation of the document before a real update |
 | lock | OS lock coordination between processes |
 | tasks.json.tmp, tasks.json.backup.tmp | Temporary save files |
@@ -402,7 +408,7 @@ Reading an existing data directory also opens or creates `lock` for read/write a
 
 There is no automatic recovery or dedicated restore command. First stop every tque instance and preserve the current document, backup, and remaining temporary files elsewhere. Do not delete a corrupt document and continue with an empty store, or blindly replace it with a temporary file.
 
-Simply overwriting the document with an older backup may reuse deleted IDs or roll the revision backward. Recovery must verify `next_id` and `revision` as well as tasks. When valid counters are known from both documents, the design requires the maximum `next_id` and the maximum `revision` plus one. This is not possible if the integer limit would be exceeded. If counters cannot be recovered from the current document, lifetime ID non-reuse cannot be guaranteed; do not invent a replacement counter from remaining task IDs.
+Simply overwriting the document with an older backup rolls `revision` backward. When both values are known, set the recovered `revision` to the larger value plus one. This is not possible if the integer limit would be exceeded.
 
 Consult the [storage and recovery design (Japanese)](detailed-design.md) before manual restoration. Verify that the recovered document loads and contains the expected tasks before resuming normal updates.
 
@@ -416,7 +422,7 @@ Consult the [storage and recovery design (Japanese)](detailed-design.md) before 
 | Parent progress does not change | Check manual mode and completion. Use -p auto to enable automatic calculation |
 | ConfigError | Check the reported configuration path, JSON, key, and data path |
 | InvalidInput | Check title, dates, progress range, and start/due order |
-| NotFound | Check IDs with ls --all. Deleted IDs are not reused |
+| NotFound | Check IDs with ls --all |
 | CycleDetected | Check hierarchy or dependencies for cycles |
 | ReferencedTask | Inspect dependencies outside the deletion set; edit them appropriately before retrying |
 | RevisionConflict | Review current data and explicitly reconfirm the retained draft |
