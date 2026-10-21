@@ -10,6 +10,16 @@ CLIとTUIを一つの実行ファイルにまとめたタスク管理アプリ�
 
 Windows版の対象はWindows 11です。インストーラーはビルド22000以上を要求し、Windows 10にはインストールできません。
 
+## スクリーンショット
+
+TUIでは、親子関係・進捗・期日・依存待ちを一覧で確認できます。
+
+![tqueのTUI：タスクの親子関係と進捗を表示](images/screenshot1.png)
+
+CLIからタスクを追加し、ツリー形式で一覧を表示する例です。
+
+![tqueのCLI：タスクの追加とツリー形式の一覧](images/screenshot2.png)
+
 ## ビルドと起動
 
 ```powershell
@@ -106,7 +116,7 @@ Windowsの絶対パス例は`"D:/tque-data"`です。相対パスはconfig.json�
 
 ## GitHub ActionsでのZIP作成
 
-`test-and-package`はpush、pull request、手動実行で起動します。Windows・macOS・Linuxでのテスト成功後、Ubuntu上で各OSのamd64／arm64向けに6種類のZIPを作成します。バージョンは`VERSION`から取得します。
+`test-and-package`はブランチpush、`v*`タグのpush、pull request、手動実行で起動します。`VERSION`を検査し、Windows・macOS・Linuxでのテスト成功後、Ubuntu上で各OSのamd64／arm64向けに6種類のZIPを作成します。バージョンは`VERSION`から取得します。
 
 ```text
 tque-0.1.0-windows-amd64.zip
@@ -119,7 +129,15 @@ tque-0.1.0-linux-arm64.zip
 
 `darwin`はmacOSです。ZIP内の同名ディレクトリに、アプリ本体（Windowsは`tque.exe`、macOS/Linuxは`tque`）、英語・日本語のREADME、CHANGELOG、docs全体（両言語の操作マニュアル・設計／レビュー記録・検証記録・チェックリスト・設定例）、LICENSE、依存ライセンスを同梱します。Unixの実行権限はZIP内に保持します。
 
-GitHubの **Actions → test-and-package → 成功した実行 → Artifacts** から対象を取得します。各ArtifactにはZIPと`.zip.sha256`チェックサムを含みます。ダウンロードするアーカイブの中に目的のZIPがあるため、中のZIPも展開してください。実行ファイルはランナーの一時ディレクトリでビルドし、リポジトリの`dist`には置きません。Release公開・タグ作成・署名付きインストーラー作成は行いません。
+GitHubの **Actions → test-and-package → 成功した実行 → Artifacts** から対象を取得します。各ArtifactにはZIPと`.zip.sha256`チェックサムを含みます。ダウンロードするアーカイブの中に目的のZIPがあるため、中のZIPも展開してください。実行ファイルはランナーの一時ディレクトリでビルドし、リポジトリの`dist`には置きません。バージョンタグのpush時は、以下の手順でReleaseにも登録します。タグ作成や署名付きインストーラー作成は行いません。
+
+### バージョンタグによるRelease公開
+
+`VERSION`の値に`v`を付けたタグをpushします。例えば`0.1.0`なら`v0.1.0`です。先に公開対象のソースとワークフロー変更をコミット・pushし、そのコミットへタグを付けてください。タグとVERSIONが不一致なら、テストやパッケージ作成の前に停止します。現在の形式は`vMAJOR.MINOR.PATCH`で、プレリリース用の接尾辞には対応しません。
+
+3 OSのテストと6対象すべてのパッケージ作成に成功した後、同じ実行のArtifactsを取得してZIPとSHA256を確認し、`tque v0.1.0`というタイトルのReleaseを公開します。説明はGitHubが自動生成します。添付はZIP 6個と`.zip.sha256` 6個で、リポジトリのReleasesから直接取得できます。これらはアプリ本体であり、署名付きインストーラーではありません。
+
+公開するのは**タグのpush時だけ**です。ブランチpush・pull request・手動実行ではArtifactsの作成までに留めます。公開ジョブだけに組込み`GITHUB_TOKEN`の`contents: write`を付与し、個人アクセストークンは不要です。再実行しても既存Releaseを上書きしません。アップロードが失敗した場合は、残ったRelease／下書きと添付内容を確認してから再試行してください。タグの作成・pushは利用者が明示的に行います。[GitHub CLIのRelease作成仕様](https://cli.github.com/manual/gh_release_create)を参照しています。
 
 本体の[MITライセンス](LICENSE)の著作権者は`fukuyori`です。ZIP作成に必要なLICENSEの条件は満たしています。クロスビルド成功と対象機での動作確認は別です。macOS・ARM64の実機動作は未確認です。
 
@@ -159,16 +177,14 @@ tque completion fish | source
 
 [依存モジュール一覧](third-party-licenses/MODULES.txt)に取得対象のバージョンを記録し、対応するサブディレクトリに著作権表示とライセンス原文を保存しました。パッケージ作成時には、テスト用・ツール用の依存とサブディレクトリ内のライセンスを含め、モジュールグラフ全体から再取得します。特定の実行ファイルにリンクされる依存だけの一覧ではありません。
 
-Windowsは`build-installer.ps1`でInno Setupを使用します。`-Sign`指定時は実行ファイル、インストーラー、アンインストーラーに署名します。署名IDの形式は検討中で、現スクリプトは**証明書ストアのSHA1拇印**のみ受け付けます。別形式を推測して使用しません。
+Windowsは`build-installer.ps1`でInno Setupを使用します。`-Sign`指定時は実行ファイル、インストーラー、アンインストーラーに署名します。`CODESIGN_CERT`はwtmuxと同じく**証明書ストア内の証明書のサブジェクト名**を指定し、`signtool /n`へ渡します。SignToolはWindows SDK（OSのネイティブアーキテクチャ優先、次にx64）またはPATHから検出します。RFC3161タイムスタンプURLの既定値もwtmuxと同じ`http://timestamp.sectigo.com`です。
 
 ```powershell
-# CODESIGN_CERTを確認済みの証明書拇印に設定した環境で実施
-./scripts/build-installer.ps1 -Sign `
-  -SignToolPath 'C:/Program Files (x86)/Windows Kits/10/bin/<SDK版>/x64/signtool.exe' `
-  -TimestampUrl 'https://<利用するRFC3161タイムスタンプサービス>'
+# CODESIGN_CERTに証明書のサブジェクト名を設定した環境で実施
+./scripts/build-installer.ps1 -Sign
 ```
 
-CurrentUserの証明書ストアを既定とし、LocalMachineは`-MachineCertificateStore`を明示します。実際の署名とインストール・アンインストールは未検証です。設定・保存データはアンインストールで削除しません。
+40桁のSHA1拇印で選ぶ場合は、`CODESIGN_CERT`に拇印を設定し、`-CertificateSelector Thumbprint`を追加してください。既定の選択方法は`SubjectName`で、証明書ファイルやPFXには対応しません。`-SignToolPath`／`-TimestampUrl`で検出先やタイムスタンプサービスを変更できます。CurrentUserの証明書ストアを既定とし、LocalMachineは`-MachineCertificateStore`を明示します。PowerShell 5.1と7で引数処理を確認済みですが、実際の署名とインストール・アンインストールは未検証です。設定・保存データはアンインストールで削除しません。`/n`と`/sha1`の指定方法は[MicrosoftのSignTool公式資料](https://learn.microsoft.com/en-us/windows/win32/seccrypto/signtool)を参照しています。
 
 macOS/Linuxは`bash scripts/package-release.sh OS ARCH`でtar.gzとSHA256を作成します。ライセンス類を同梱します。macOSの署名・公証は別途対応が必要です。
 

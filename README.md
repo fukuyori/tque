@@ -10,6 +10,16 @@ This is an initial implementation. See the [implementation and verification reco
 
 Windows targets Windows 11; the installer requires build 22000 or later and does not install on Windows 10.
 
+## Screenshots
+
+Interactive task tree with progress, due dates, and dependency indicators (Japanese UI).
+
+![tque TUI showing hierarchical tasks and progress](images/screenshot1.png)
+
+Adding tasks and listing the task tree from the CLI.
+
+![tque CLI showing task creation and tree output](images/screenshot2.png)
+
 ## Build and run
 
 ```powershell
@@ -109,7 +119,7 @@ Changing `data_dir` does not move data automatically. Stop all instances before 
 
 ## GitHub Actions ZIP builds
 
-The `test-and-package` workflow runs on pushes, pull requests, and manual dispatch. It tests on Windows, macOS, and Linux, then builds ZIPs for six OS/architecture combinations on Ubuntu.
+The `test-and-package` workflow runs on branch pushes, `v*` tag pushes, pull requests, and manual dispatch. It validates `VERSION`, tests on Windows, macOS, and Linux, then builds ZIPs for six OS/architecture combinations on Ubuntu.
 
 ZIP names use the version in `VERSION`:
 
@@ -124,7 +134,15 @@ tque-0.1.0-linux-arm64.zip
 
 `darwin` means macOS. Each ZIP contains a directory with the same base name, containing `tque.exe` on Windows or `tque` on macOS/Linux, both README languages, CHANGELOG, the complete docs directory (both manuals, design/review records, verification notes, checklists, and configuration examples), the application license, and dependency licenses. Unix executables are archived with execute permissions.
 
-In GitHub, open **Actions → test-and-package → a successful run → Artifacts**, then download the desired target. Each artifact includes the ZIP and its `.zip.sha256` checksum. The artifact download is a wrapper archive containing the named ZIP; extract that ZIP as well. Builds use the runner's temporary directory rather than placing bare executables in the repository's `dist` directory. This workflow uploads artifacts; it does not create GitHub Releases, tags, or signed installers.
+In GitHub, open **Actions → test-and-package → a successful run → Artifacts**, then download the desired target. Each artifact includes the ZIP and its `.zip.sha256` checksum. The artifact download is a wrapper archive containing the named ZIP; extract that ZIP as well. Builds use the runner's temporary directory rather than placing bare executables in the repository's `dist` directory. A version-tag push also publishes a GitHub Release as described below. The workflow does not create tags or signed installers.
+
+### Publish a version-tag release
+
+Push a tag named `v` followed by the exact contents of `VERSION`, such as `v0.1.0` for `0.1.0`. Commit and push the intended source and workflow changes before tagging that commit. A mismatched tag is rejected before testing or packaging. The current format is `vMAJOR.MINOR.PATCH`; prerelease suffixes are not accepted.
+
+After all three OS test jobs and all six packaging jobs succeed, the release job downloads the artifacts from that same run, checks each ZIP and SHA256, and publishes a release titled `tque v0.1.0` with automatically generated notes. The assets are six ZIP files and six `.zip.sha256` files; download them directly from the repository's Releases page. These are application binaries, not signed installers.
+
+Only a **tag push** publishes a release. Branch pushes, pull requests, and manual workflow dispatch only build artifacts. The release job alone receives `contents: write` through the built-in `GITHUB_TOKEN`; no personal access token is needed. An existing release is not overwritten on reruns. If uploading fails, inspect the existing release/draft and assets before retrying. Tag creation and pushing remain explicit maintainer actions. See [GitHub CLI release creation](https://cli.github.com/manual/gh_release_create).
 
 The project's [MIT license](LICENSE) identifies the copyright holder as `fukuyori`. The license prerequisite for ZIP creation is satisfied. Cross-build success is separate from target-machine testing. macOS and ARM64 binaries have not yet been verified on their target machines.
 
@@ -164,15 +182,13 @@ Distribution includes the project's [LICENSE](LICENSE), with `Copyright (c) 2026
 
 The [third-party module list](third-party-licenses/MODULES.txt) identifies the collected dependency versions. Original copyright notices and license texts are retained in the corresponding subdirectories. Package scripts collect these files again from the full module graph, including test/tool dependencies and licenses in subdirectories; this is broader than the modules linked into a particular executable.
 
-On Windows, `scripts/build-installer.ps1` uses Inno Setup. With `-Sign`, it signs the executable, installer, and uninstaller. The current signing script accepts only a certificate-store SHA1 thumbprint in `CODESIGN_CERT`; the actual certificate format to use remains undecided.
+On Windows, `scripts/build-installer.ps1` uses Inno Setup. With `-Sign`, it signs the executable, installer, and uninstaller. Set `CODESIGN_CERT` to the certificate subject name in your certificate store, matching wtmux's `signtool /n` convention. SignTool is discovered in the Windows SDK (native architecture first, then x64) or on PATH. The default RFC3161 timestamp URL is `http://timestamp.sectigo.com`, also matching wtmux.
 
 ```powershell
-./scripts/build-installer.ps1 -Sign `
-  -SignToolPath 'C:/Program Files (x86)/Windows Kits/10/bin/<SDK version>/x64/signtool.exe' `
-  -TimestampUrl 'https://<your RFC3161 timestamp service>'
+./scripts/build-installer.ps1 -Sign
 ```
 
-The default certificate store is CurrentUser; use `-MachineCertificateStore` for LocalMachine. Actual signing, installation, and uninstallation remain unverified. Configuration and task data are retained on uninstall.
+To select by a 40-digit SHA1 thumbprint instead, set `CODESIGN_CERT` to that thumbprint and add `-CertificateSelector Thumbprint`. The default selector is `SubjectName`; certificate files/PFX are not supported. Override SDK discovery or the timestamp service with `-SignToolPath` / `-TimestampUrl`. The default certificate store is CurrentUser; use `-MachineCertificateStore` for LocalMachine. Argument handling has been checked on PowerShell 5.1 and 7; actual signing, installation, and uninstallation remain unverified. Configuration and task data are retained on uninstall. See [Microsoft's SignTool options](https://learn.microsoft.com/en-us/windows/win32/seccrypto/signtool) for `/n` and `/sha1` selection.
 
 For macOS/Linux tar.gz packaging, use `bash scripts/package-release.sh OS ARCH`. It includes licenses and creates a SHA256 checksum. macOS signing and notarization require separate work.
 

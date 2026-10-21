@@ -5,6 +5,7 @@
 - `README.md`、`README.ja.md`、`docs/implementation-status.md`: 掲載する例と検証結果を確認する。過去の設計・レビュー記録の日付は書き換えない。
 - `docs/user-manual.md`、`docs/user-manual.ja.md`: 英語・日本語両方の対象バージョン、コマンド・キー操作、設定と保存・復旧の説明を実装と照合する。
 - `.github/workflows/ci.yml`、`scripts/package-zip.sh`: ZIP名にVERSION・OS・アーキテクチャが反映され、英語・日本語のREADMEと操作マニュアルが同梱されることを確認する。
+- `scripts/publish-release.sh`: タグを`v`+VERSIONと一致させる。タグpushで3 OSテスト・6対象のパッケージ作成後、ReleaseにZIP 6個・SHA256 6個が登録されたことを確認する。既存Releaseは上書きしない。
 - `go.mod`、`go.sum`: Goまたは依存更新時のみ更新。`toolchain`を更新し、`.github/workflows/ci.yml`が`go-version-file: go.mod`でその版を取得することを確認する。
 - `LICENSE`: 著作権者は`fukuyori`。著作権年は実際の状況に合わせて確認する。依存ライブラリの著作権表示は変更しない。
 - `scripts/build-release.ps1` / `.sh`、`scripts/build-installer.ps1`、`installer/tque.iss`: 版番号を手動埋込みせずVERSIONを使用することを確認する。

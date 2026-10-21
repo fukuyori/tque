@@ -2,8 +2,9 @@
 param(
     [ValidateSet('amd64','arm64')][string]$Arch = 'amd64',
     [switch]$Sign,
-    [string]$TimestampUrl,
+    [string]$TimestampUrl = 'http://timestamp.sectigo.com',
     [string]$SignToolPath,
+    [ValidateSet('SubjectName','Thumbprint')][string]$CertificateSelector = 'SubjectName',
     [switch]$MachineCertificateStore,
     [string]$ISCCPath = 'ISCC.exe'
 )
@@ -12,13 +13,10 @@ $repo = Split-Path $PSScriptRoot -Parent
 if (-not (Test-Path -LiteralPath (Join-Path $repo 'LICENSE'))) { throw 'Finalize the copyright holder and LICENSE before packaging.' }
 if ((Get-Content -LiteralPath (Join-Path $repo 'LICENSE') -Raw).Contains('{{COPYRIGHT_HOLDER}}')) { throw 'LICENSE still contains an unresolved copyright holder.' }
 if ($Sign) {
-    if ($env:CODESIGN_CERT -notmatch '^[0-9a-fA-F]{40}$') { throw 'Confirm CODESIGN_CERT format; this script supports certificate-store SHA1 thumbprints.' }
+    . (Join-Path $PSScriptRoot 'signing.ps1')
+    $null = Get-TqueCertificateArguments -Selector $CertificateSelector
     if ($TimestampUrl -notmatch '^https?://') { throw '-TimestampUrl is required with -Sign' }
-    if (-not $SignToolPath) {
-        $command = Get-Command signtool.exe -ErrorAction SilentlyContinue
-        if ($command) { $SignToolPath = $command.Source }
-    }
-    if (-not $SignToolPath -or -not (Test-Path -LiteralPath $SignToolPath)) { throw 'Supply -SignToolPath pointing to the Windows SDK signtool.exe' }
+    $SignToolPath = Resolve-TqueSignTool -Path $SignToolPath
 }
 & (Join-Path $PSScriptRoot 'build-release.ps1') -OS windows -Arch $Arch
 $stage = Join-Path $repo ('dist/installer-' + [guid]::NewGuid().ToString('N'))
@@ -31,11 +29,13 @@ $version = (Get-Content -LiteralPath (Join-Path $repo 'VERSION') -Raw).Trim()
 $output = Join-Path $repo 'dist'
 $arguments = @('/Qp',"/DAppVersion=$version","/DTargetArch=$Arch","/DStageDir=$stage","/DOutputPath=$output")
 $oldTool,$oldURL,$oldStore = $env:TQUE_SIGNTOOL_PATH,$env:TQUE_SIGN_TIMESTAMP_URL,$env:TQUE_SIGN_MACHINE_STORE
+$oldSelector = $env:TQUE_SIGN_CERT_SELECTOR
 try {
     if ($Sign) {
         $env:TQUE_SIGNTOOL_PATH = (Resolve-Path -LiteralPath $SignToolPath).Path
         $env:TQUE_SIGN_TIMESTAMP_URL = $TimestampUrl
         $env:TQUE_SIGN_MACHINE_STORE = if ($MachineCertificateStore) { '1' } else { '0' }
+        $env:TQUE_SIGN_CERT_SELECTOR = $CertificateSelector
         $helper = Join-Path $PSScriptRoot 'sign-file.ps1'
         & $helper -Path (Join-Path $stage 'tque.exe')
         if ($LASTEXITCODE -ne 0) { throw 'Executable signing failed' }
@@ -54,4 +54,5 @@ try {
     }
 } finally {
     $env:TQUE_SIGNTOOL_PATH=$oldTool; $env:TQUE_SIGN_TIMESTAMP_URL=$oldURL; $env:TQUE_SIGN_MACHINE_STORE=$oldStore
+    $env:TQUE_SIGN_CERT_SELECTOR=$oldSelector
 }

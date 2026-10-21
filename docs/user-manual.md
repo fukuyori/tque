@@ -10,6 +10,7 @@ tque is a terminal task manager. Use commands through its CLI or operate a task 
 
 - [Starting tque](#starting-tque)
 - [Your first tasks](#your-first-tasks)
+- [Worked example: preparing a document](#worked-example-preparing-a-document)
 - [Using the TUI](#using-the-tui)
 - [Using the CLI](#using-the-cli)
 - [Hierarchy, dependencies, and progress](#hierarchy-dependencies-and-progress)
@@ -75,6 +76,77 @@ tque ls --ready
 ```
 
 “Write the text” is blocked while “Plan the outline” is incomplete. Completing task 2 clears that dependency warning. The parent may also appear in `--ready` when it meets the ready conditions.
+
+## Worked example: preparing a document
+
+This example starts with an empty store and follows three tasks through to completion. `>` marks a command to type; omit that marker when running it. Lines below each command are actual output. With existing data, replace IDs `1`, `2`, and `3` with the IDs reported by `add`. Running this after the previous example adds another set of tasks; you do not need to erase existing data.
+
+### 1. Create a parent, children, and a dependency
+
+```text
+> tque add "Prepare a document"
+[+] Created task #1: Prepare a document
+> tque add "Plan the outline" --parent 1
+[+] Created task #2: Plan the outline
+> tque add "Write the text" --parent 1 --dep 2
+[+] Created task #3: Write the text
+> tque ls --all --tree
+1 [ ] Prepare a document [.......... 0%]
+├─ 2 [ ] Plan the outline [.......... 0%]
+└─ 3 [ ] Write the text [.......... 0%] (blocked by #2)
+```
+
+`blocked by #2` means writing the text is waiting for task 2 to finish.
+
+### 2. Update progress
+
+```text
+> tque edit 2 --progress 50
+[*] Updated task #2
+> tque ls --all --tree
+1 [ ] Prepare a document [##........ 25%]
+├─ 2 [ ] Plan the outline [manual] [#####..... 50%]
+└─ 3 [ ] Write the text [.......... 0%] (blocked by #2)
+```
+
+The children are at 50% and 0%, so the parent automatically shows 25%. `[manual]` identifies explicitly set progress.
+
+### 3. Clear the dependency
+
+```text
+> tque done 2
+[x] Completed task #2
+> tque ls --ready
+1 [ ] Prepare a document [#####..... 50%]
+3 [ ] Write the text [.......... 0%]
+```
+
+Task 3 is now ready and no longer carries a dependency warning. Parent task 1 also meets the ready conditions and appears in this list.
+
+### 4. Complete the children and the parent
+
+```text
+> tque done 3
+[x] Completed task #3
+> tque ls --all --tree
+1 [ ] Prepare a document [########## 100%]
+├─ 2 [x] Plan the outline [manual] [########## 100%]
+└─ 3 [x] Write the text [########## 100%]
+> tque done 1
+[x] Completed task #1
+> tque ls --all --tree
+1 [x] Prepare a document [########## 100%]
+├─ 2 [x] Plan the outline [manual] [########## 100%]
+└─ 3 [x] Write the text [########## 100%]
+```
+
+Completing all children brings the parent to 100%, but does not automatically mark it completed. `done 1` completes the parent. Use `--all` to include completed tasks.
+
+### 5. Inspect the result in the TUI
+
+Start `tque` to see the same three tasks in the tree. If it is already open, press `r` to reload and use `f` to select all tasks. Select the parent and press Left to collapse it or Right to expand it. Enter opens details; Esc returns to the list.
+
+To remove these three practice tasks afterward, first check the parent ID and its children with `tque ls --all --tree`, then run `tque rm 1 --cascade`, replacing `1` with the actual parent ID. This command deletes the parent and its children without a confirmation prompt.
 
 ## Using the TUI
 
