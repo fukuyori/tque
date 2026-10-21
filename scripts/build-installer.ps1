@@ -23,8 +23,10 @@ $stage = Join-Path $repo ('dist/installer-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $stage | Out-Null
 Copy-Item -LiteralPath (Join-Path $repo "dist/tque-windows-$Arch.exe") -Destination (Join-Path $stage 'tque.exe')
 foreach ($file in @('LICENSE','README.md','README.ja.md','CHANGELOG.md')) { Copy-Item -LiteralPath (Join-Path $repo $file) -Destination $stage }
-Copy-Item -LiteralPath (Join-Path $repo 'docs') -Destination (Join-Path $stage 'docs') -Recurse
-& (Join-Path $PSScriptRoot 'collect-licenses.ps1') -OutputDirectory (Join-Path $stage 'third-party-licenses')
+$docsStage = Join-Path $stage 'docs'
+New-Item -ItemType Directory -Path $docsStage | Out-Null
+foreach ($file in @('user-manual.md','user-manual.ja.md')) { Copy-Item -LiteralPath (Join-Path $repo "docs/$file") -Destination $docsStage }
+& (Join-Path $PSScriptRoot 'collect-licenses.ps1') -OutputDirectory (Join-Path $stage 'third-party-licenses') -BinaryPath (Join-Path $stage 'tque.exe') -OS windows -Arch $Arch
 $version = (Get-Content -LiteralPath (Join-Path $repo 'VERSION') -Raw).Trim()
 $output = Join-Path $repo 'dist'
 $arguments = @('/Qp',"/DAppVersion=$version","/DTargetArch=$Arch","/DStageDir=$stage","/DOutputPath=$output")

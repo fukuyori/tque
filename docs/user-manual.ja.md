@@ -2,7 +2,7 @@
 
 [English](user-manual.md) | [日本語](user-manual.ja.md)
 
-対象: tque 0.2.0
+対象: tque 0.2.1
 
 Windows版の対象はWindows 11です。インストーラーはビルド22000以上を要求し、Windows 10にはインストールできません。macOS用ファイル名の`darwin`はmacOSを表します。
 
@@ -23,7 +23,7 @@ tqueは、ターミナルで使うタスク管理アプリです。コマンド�
 
 ## 起動する
 
-実行ファイルはWindows、macOS、Linux向けです。OSとCPUに合うものを使用してください。`amd64`はx64、`arm64`はARM64向けです。実行時にGoや外部データベースは必要ありません。ビルド方法・ActionsのZIP取得方法は[README](../README.ja.md)、OSごとの検証状況は[実装・検証記録](implementation-status.md)を参照してください。
+実行ファイルはWindows、macOS、Linux向けです。OSとCPUに合うものを使用してください。`amd64`はx64、`arm64`はARM64向けです。実行時にGoや外部データベースは必要ありません。ビルド方法・ActionsのZIP取得方法は[README](../README.ja.md)、OSごとの検証状況は[実装・検証記録](https://github.com/fukuyori/tque/blob/HEAD/docs/implementation-status.md)を参照してください。
 
 WindowsのPowerShellで、カレントディレクトリにある実行ファイルを起動する例です。
 
@@ -416,7 +416,7 @@ JSON内でバックスラッシュを使う場合は`"D:\\tque-data"`のよう�
 
 古いバックアップをそのまま上書きすると、更新番号`revision`が巻き戻ります。本体とバックアップの値が確認できる場合、復旧後の`revision`は両者の最大値+1にします。整数の上限を超える場合はこの方法を使えません。
 
-手作業の復旧は[設計書の保存・復旧規則](detailed-design.md)を確認したうえで行い、復旧したデータを読み込めることと内容を確認してから通常操作を再開してください。
+手作業の復旧は[設計書の保存・復旧規則](https://github.com/fukuyori/tque/blob/HEAD/docs/detailed-design.md)を確認したうえで行い、復旧したデータを読み込めることと内容を確認してから通常操作を再開してください。
 
 ## 困ったとき
 

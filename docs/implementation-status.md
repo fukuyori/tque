@@ -2,6 +2,8 @@
 
 更新日: 2026-10-21。初回バージョン0.1.0。0.2.0で採番方法を最大ID+1へ変更し、保存形式をschema_version 2とした（0.1.0のデータとの互換性なし）。
 
+0.2.1では配布物のdocsを日英マニュアルに限定し、対象OS・CPUの依存ライセンス収集と実行ファイルとの照合を共通化した。Go 1.27.3で6対象のビルドと各19モジュールの収集・照合を確認し、`go test ./...` と `go vet ./...` が成功。対象不一致・既存収集先・依存情報不一致の拒否も確認した。アーカイブ・インストーラーの作成とGitHub Actions上での検証は、このローカル検証には含まない。
+
 ## 実装した範囲
 
 - model/engine: ID非再利用、revision、親子と依存の別々のDAG検査、深い階層の明示スタック処理、手動／自動進捗、完了状態、参照付き削除の保護。
@@ -40,7 +42,7 @@
 - Windows置換は[MoveFileExW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)のREPLACE_EXISTINGとWRITE_THROUGH。Unixはos.Renameと親ディレクトリSync。全OSで本体を先に削除しない。置換APIがエラーを返した場合は保守的にCommitUncertainとし、再試行しない。
 - GoのSync、WRITE_THROUGH、ディレクトリSyncは電源断耐性の実測ではない。特にWindowsのすべてのファイルシステム上の原子的可視性・永続性を保証したとは扱わない。全プロセスが本アプリのロック規約に従うローカル保存が前提。
 - [Inno Setup SignTool](https://jrsoftware.org/ishelp/topic_setup_signtool.htm)と[SignedUninstaller](https://jrsoftware.org/ishelp/topic_setup_signeduninstaller.htm)に従い、-Sign時に実行ファイルを先に署名し、Innoからインストーラー・アンインストーラー署名を呼び出す。
-- 推移依存のライセンスはMIT、BSD系、Apache-2.0等の原文を収集した。GoランタイムのLICENSEと、モジュールのLICENSE/COPYING/NOTICEを配布時に同梱する。収集対象はテスト用等を含むモジュールグラフ全体であり、本体にリンクされる依存だけの一覧ではない。GPLアプリからのコード移植は行っていない。
+- 推移依存のライセンスはMIT、BSD系、Apache-2.0等の原文を収集した。GoランタイムのLICENSEと、モジュールのLICENSE/COPYING/NOTICEを配布時に同梱する。リポジトリ内の収集記録はテスト用等を含むモジュールグラフ全体。0.2.1の配布物では対象OS・CPUの依存モジュールだけを収集し、実行ファイルと照合する。GPLアプリからのコード移植は行っていない。
 
 ## 配布前の残項目
 

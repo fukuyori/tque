@@ -15,8 +15,9 @@ stage=$(mktemp -d "$repo/dist/package.XXXXXXXX")
 cp "dist/tque-$target_os-$target_arch" "$stage/tque"
 chmod 755 "$stage/tque"
 cp LICENSE README.md README.ja.md CHANGELOG.md "$stage/"
-cp -R docs "$stage/docs"
-bash scripts/collect-licenses.sh "$stage/third-party-licenses"
+mkdir -p "$stage/docs"
+cp docs/user-manual.md docs/user-manual.ja.md "$stage/docs/"
+bash scripts/collect-licenses.sh "$stage/third-party-licenses" "$stage/tque" "$target_os" "$target_arch"
 archive="$repo/dist/tque-$version-$target_os-$target_arch.tar.gz"
 tar -czf "$archive" -C "$stage" .
 if command -v sha256sum >/dev/null; then

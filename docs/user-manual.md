@@ -2,7 +2,7 @@
 
 [English](user-manual.md) | [日本語](user-manual.ja.md)
 
-Applies to tque 0.2.0.
+Applies to tque 0.2.1.
 
 tque is a terminal task manager. Use commands through its CLI or operate a task list with the keyboard through its TUI. Both interfaces use the same saved data. This manual is in English; it does not change the language of messages displayed by the application.
 
@@ -21,7 +21,7 @@ tque is a terminal task manager. Use commands through its CLI or operate a task 
 
 ## Starting tque
 
-Use an executable built for your operating system and CPU. `amd64` means x64; `arm64` means ARM64. macOS builds use the OS name `darwin`. Windows targets Windows 11; the installer requires build 22000 or later and does not install on Windows 10. Running tque does not require Go or an external database. See the [README](../README.md) for builds and ZIP artifacts, and the [verification record (Japanese)](implementation-status.md) for platform coverage.
+Use an executable built for your operating system and CPU. `amd64` means x64; `arm64` means ARM64. macOS builds use the OS name `darwin`. Windows targets Windows 11; the installer requires build 22000 or later and does not install on Windows 10. Running tque does not require Go or an external database. See the [README](../README.md) for builds and ZIP artifacts, and the [verification record (Japanese)](https://github.com/fukuyori/tque/blob/HEAD/docs/implementation-status.md) for platform coverage.
 
 After extracting a ZIP, open a terminal in the directory containing the executable.
 
@@ -410,7 +410,7 @@ There is no automatic recovery or dedicated restore command. First stop every tq
 
 Simply overwriting the document with an older backup rolls `revision` backward. When both values are known, set the recovered `revision` to the larger value plus one. This is not possible if the integer limit would be exceeded.
 
-Consult the [storage and recovery design (Japanese)](detailed-design.md) before manual restoration. Verify that the recovered document loads and contains the expected tasks before resuming normal updates.
+Consult the [storage and recovery design (Japanese)](https://github.com/fukuyori/tque/blob/HEAD/docs/detailed-design.md) before manual restoration. Verify that the recovered document loads and contains the expected tasks before resuming normal updates.
 
 ## Troubleshooting
 

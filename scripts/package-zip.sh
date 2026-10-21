@@ -30,8 +30,9 @@ suffix=''; [[ "$target_os" != windows ]] || suffix=.exe
 cp -- "$work/build/tque-$target_os-$target_arch$suffix" "$stage/tque$suffix"
 chmod 755 "$stage/tque$suffix"
 cp LICENSE README.md README.ja.md CHANGELOG.md "$stage/"
-cp -R docs "$stage/docs"
-bash scripts/collect-licenses.sh "$stage/third-party-licenses"
+mkdir -p "$stage/docs"
+cp docs/user-manual.md docs/user-manual.ja.md "$stage/docs/"
+bash scripts/collect-licenses.sh "$stage/third-party-licenses" "$stage/tque$suffix" "$target_os" "$target_arch"
 (cd "$work" && zip -q -r "$archive" "$name")
 (cd "$out" && if command -v sha256sum >/dev/null; then
     sha256sum "$name.zip" > "$name.zip.sha256"
