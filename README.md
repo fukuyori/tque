@@ -126,12 +126,12 @@ The `test-and-package` workflow runs on branch pushes, `v*` tag pushes, pull req
 ZIP names use the version in `VERSION`:
 
 ```text
-tque-0.2.2-windows-amd64.zip
-tque-0.2.2-windows-arm64.zip
-tque-0.2.2-darwin-amd64.zip
-tque-0.2.2-darwin-arm64.zip
-tque-0.2.2-linux-amd64.zip
-tque-0.2.2-linux-arm64.zip
+tque-0.2.3-windows-amd64.zip
+tque-0.2.3-windows-arm64.zip
+tque-0.2.3-darwin-amd64.zip
+tque-0.2.3-darwin-arm64.zip
+tque-0.2.3-linux-amd64.zip
+tque-0.2.3-linux-arm64.zip
 ```
 
 `darwin` means macOS. Each ZIP contains a directory with the same base name, containing `tque.exe` on Windows or `tque` on macOS/Linux, both README languages, CHANGELOG, the complete docs directory (both manuals, design/review records, verification notes, checklists, and configuration examples), the application license, and dependency licenses. Unix executables are archived with execute permissions.
@@ -140,9 +140,9 @@ In GitHub, open **Actions → test-and-package → a successful run → Artifact
 
 ### Publish a version-tag release
 
-Push a tag named exactly as the contents of `VERSION`, such as `0.2.2`. Commit and push the intended source and workflow changes before tagging that commit. A mismatched tag is rejected before testing or packaging. The format is `MAJOR.MINOR.PATCH` without a `v` prefix; prerelease suffixes are not accepted.
+Push a tag named exactly as the contents of `VERSION`, such as `0.2.3`. Commit and push the intended source and workflow changes before tagging that commit. A mismatched tag is rejected before testing or packaging. The format is `MAJOR.MINOR.PATCH` without a `v` prefix; prerelease suffixes are not accepted.
 
-After all three OS test jobs and all six packaging jobs succeed, the release job downloads the artifacts from that same run, checks each ZIP and SHA256, and publishes a release titled `tque 0.2.2` with automatically generated notes. The assets are six ZIP files and six `.zip.sha256` files; download them directly from the repository's Releases page. These are application binaries, not signed installers.
+After all three OS test jobs and all six packaging jobs succeed, the release job downloads the artifacts from that same run, checks each ZIP and SHA256, and publishes a release titled `tque 0.2.3` with automatically generated notes. The assets are six ZIP files and six `.zip.sha256` files; download them directly from the repository's Releases page. These are application binaries, not signed installers.
 
 Only a **tag push** publishes a release. Branch pushes, pull requests, and manual workflow dispatch only build artifacts. The release job alone receives `contents: write` through the built-in `GITHUB_TOKEN`; no personal access token is needed. An existing release is not overwritten on reruns. If uploading fails, inspect the existing release/draft and assets before retrying. Tag creation and pushing remain explicit maintainer actions. See [GitHub CLI release creation](https://cli.github.com/manual/gh_release_create).
 

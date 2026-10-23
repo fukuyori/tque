@@ -2,7 +2,7 @@
 
 [English](user-manual.md) | [日本語](user-manual.ja.md)
 
-Applies to tque 0.2.2.
+Applies to tque 0.2.3.
 
 tque is a terminal task manager. Use commands through its CLI or operate a task list with the keyboard through its TUI. Both interfaces use the same saved data. This manual is in English; it does not change the language of messages displayed by the application.
 
@@ -154,7 +154,7 @@ In the task list, uppercase `J` / `K` scroll down / up while keeping the selecte
 
 ### Reading the screen
 
-Top-level titles and branch guides are white. Child levels cycle through cyan, teal, blue, and purple by depth. Parent titles are bold. Completed tasks retain their level color and use `[x]` to indicate completion. For incomplete tasks, overdue dates are red and today's dates are yellow; the dependency marker `!dep` is also yellow. Selection uses reverse video instead of these colors, and completed rows do not use warning colors. The exact colors depend on your terminal palette. Set `NO_COLOR` to a nonempty value to disable colors, bold text, and reverse video.
+Top-level titles and branch guides are white. Child levels cycle through cyan, teal, blue, and purple by depth. All titles use normal font weight, including parents. Completed task rows use light gray and `[x]` to indicate completion. For incomplete tasks, overdue dates are red and today's dates are yellow; the dependency marker `!dep` is also yellow. Selection uses reverse video instead of these colors, and completed rows do not use warning colors. The exact colors depend on your terminal palette. Set `NO_COLOR` to a nonempty value to disable colors and reverse video.
 
 The TUI and CLI `tque ls --tree` use `├─`, `└─`, and `│` to mark child tasks. One blank line separates a visible group of children from the next top-level task. Consecutive top-level tasks have no blank line between them. In the TUI, separators cannot be selected, and collapsing a parent's children also removes the separator after that group.
 

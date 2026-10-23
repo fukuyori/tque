@@ -33,14 +33,42 @@ func (m *Model) detailHeight() int {
 		return 4
 	}
 	if m.editing() || m.mode == "delete" {
-		return 2
+		return min(2, max(0, m.height-9))
 	}
 	if m.height >= 14 {
 		return 1
 	}
 	return 0
 }
-func (m *Model) listHeight() int { return max(1, m.height-7-m.detailHeight()) }
+func (m *Model) listHeight() int { return max(1, m.height-8-m.detailHeight()) }
+
+type listColumns struct {
+	id, task, progress, date int
+	bar                      bool
+}
+
+func (m *Model) columns() listColumns {
+	c := listColumns{id: max(2, m.idWidth), progress: 4}
+	if m.width >= 60 {
+		c.date = 12
+	}
+	// Use the same bar width for every row and the header, independent of tags.
+	if m.width >= 80 && m.width-(c.id+8)-c.date-17-1 >= 16 {
+		c.bar = true
+		c.progress = 17
+	}
+	c.task = max(1, m.width-(c.id+8)-c.progress-c.date-1)
+	return c
+}
+
+func (m *Model) listHeader() string {
+	c := m.columns()
+	line := fmt.Sprintf("  %*s %s ", c.id, "ID", pad("状態", 4)) + pad("  タスク", c.task) + " " + pad("進捗", c.progress)
+	if c.date > 0 {
+		line += " " + pad("期日", 10) + " "
+	}
+	return line
+}
 
 func (m *Model) View() tea.View {
 	lines := []string{}
@@ -68,7 +96,7 @@ func (m *Model) View() tea.View {
 		lines = append(lines, fmt.Sprintf("↑↓:スクロール  Esc:戻る  %d/%d", m.page+1, max(1, len(content))))
 	} else {
 		filters := []string{"全件", "未完了", "今日まで", "期限超過", "着手可能"}
-		lines = append(lines, "tque  保存先: "+safe(m.dir), fmt.Sprintf("表示:%s  並び:%s  一致:%d件  検索:%s", filters[m.filter], m.sort, m.matched, safe(m.search)), " ID  タスク / 状態                         進捗・期日")
+		lines = append(lines, "tque  保存先: "+safe(m.dir), fmt.Sprintf("表示:%s  並び:%s  一致:%d件  検索:%s", filters[m.filter], m.sort, m.matched, safe(m.search)), strings.Repeat("-", m.width), m.listHeader())
 		count := m.listHeight()
 		slots := m.listSlots()
 		for i := 0; i < count; i++ {
@@ -98,6 +126,10 @@ func (m *Model) View() tea.View {
 		}
 		lines = append(lines, strings.Repeat("-", m.width))
 		details := m.summary()
+		if m.editing() && m.detailHeight() == 1 && len(details) > 1 {
+			// Keep the input and its cursor visible in the minimum-height terminal.
+			details = details[1:]
+		}
 		for i := 0; i < m.detailHeight(); i++ {
 			if i < len(details) {
 				lines = append(lines, details[i])
@@ -116,6 +148,7 @@ func (m *Model) View() tea.View {
 }
 
 func (m *Model) row(v engine.View) string {
+	c := m.columns()
 	mark := " "
 	if v.ID == m.selected {
 		mark = ">"
@@ -124,7 +157,7 @@ func (m *Model) row(v engine.View) string {
 	if v.Status == "done" {
 		check = "[x]"
 	}
-	prefix := fmt.Sprintf("%s %*d %s ", mark, m.idWidth, v.ID, check)
+	prefix := fmt.Sprintf("%s %*d %s ", mark, c.id, v.ID, pad(check, 4))
 	tags := ""
 	if v.Context {
 		tags += " [context]"
@@ -137,7 +170,7 @@ func (m *Model) row(v engine.View) string {
 	}
 	progress := fmt.Sprintf("%3d%%", v.EffectiveProgress)
 	date := ""
-	if m.width >= 60 {
+	if c.date > 0 {
 		date = " " + pad(v.DueDate, 10)
 		if v.Status == "todo" && v.DueDate != "" && v.DueDate < m.today {
 			date += "!"
@@ -146,11 +179,12 @@ func (m *Model) row(v engine.View) string {
 		}
 	}
 	bar := fmt.Sprintf("[%s%s] ", strings.Repeat("#", v.EffectiveProgress/10), strings.Repeat(".", 10-v.EffectiveProgress/10))
-	if m.width < 80 || m.width-ansi.StringWidth(prefix+tags+bar+progress+date)-1 < 16 {
+	if !c.bar {
 		bar = ""
 	}
-	suffix := tags + " " + bar + progress + date
-	budget := max(1, m.width-ansi.StringWidth(prefix+suffix))
+	// Keep tags inside the task column so they never move the numeric columns.
+	tags = fit(tags, max(0, c.task-min(16, c.task)))
+	budget := c.task - ansi.StringWidth(tags)
 	indent := m.treePrefixes[v.ID]
 	// Preserve the immediate branch guide even when deep ancestors do not fit.
 	limit := max(3, budget-16)
@@ -168,7 +202,7 @@ func (m *Model) row(v engine.View) string {
 	// Selection takes priority over semantic colors so reverse video remains
 	// uniform and readable across the whole selected row.
 	colored := !m.noColor && v.ID != m.selected
-	if colored {
+	if colored && v.Status != "done" {
 		// Bright, saturated cool colors keep each level visible on dark backgrounds.
 		palette := [...]string{"#00D7FF", "#00D7AF", "#5F9FFF", "#AF87FF"}
 		color := "#FFFFFF"
@@ -176,7 +210,7 @@ func (m *Model) row(v engine.View) string {
 			color = palette[(v.Depth-1)%len(palette)]
 		}
 		style := lipgloss.NewStyle().Foreground(lipgloss.Color(color))
-		title = style.Bold(len(m.children[v.ID]) > 0).Render(title)
+		title = style.Render(title)
 		indent = style.Render(indent)
 		branch = style.Render(branch)
 		if v.Blocked && v.Status != "done" {
@@ -190,11 +224,14 @@ func (m *Model) row(v engine.View) string {
 			}
 		}
 	}
-	suffix = tags + " " + bar + progress + date
+	suffix := tags + " " + bar + progress + date
 	line := prefix + pad(indent+branch+title, budget) + suffix
 	line = fit(line, m.width)
 	if !m.noColor && v.ID == m.selected {
 		return lipgloss.NewStyle().Reverse(true).Render(line)
+	}
+	if colored && v.Status == "done" {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#B0B0B0")).Render(line)
 	}
 	return line
 }

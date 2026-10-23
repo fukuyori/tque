@@ -268,7 +268,7 @@ func TestTreeSpacingAndScrolling(t *testing.T) {
 	m.refresh()
 	view := m.View().Content
 	lines := strings.Split(view, "\n")
-	if lines[7] != "" || !strings.Contains(lines[8], "RootC") || !strings.Contains(lines[9], "RootD") {
+	if lines[8] != "" || !strings.Contains(lines[9], "RootC") || !strings.Contains(lines[10], "RootD") {
 		t.Fatal(view)
 	}
 	for _, guide := range []string{"├─ ", "│  └─ ", "└─ "} {
@@ -313,14 +313,14 @@ func TestTaskRowColors(t *testing.T) {
 		color string
 	}{
 		{"parent", engine.View{Task: model.Task{ID: 1, Title: "親タスク", Status: "todo"}}, "38;2;255;255;255"},
-		{"done", engine.View{Task: model.Task{ID: 2, Title: "完了", Status: "done"}, Depth: 1}, "38;2;0;215;255"},
+		{"done", engine.View{Task: model.Task{ID: 2, Title: "完了", Status: "done"}, Depth: 1}, "38;2;176;176;176"},
 		{"overdue", engine.View{Task: model.Task{ID: 3, Title: "期限切れ", Status: "todo", DueDate: "2026-10-20"}}, "91"},
 		{"today", engine.View{Task: model.Task{ID: 3, Title: "今日", Status: "todo", DueDate: m.today}}, "93"},
 		{"blocked", engine.View{Task: model.Task{ID: 3, Title: "待機", Status: "todo"}, Blocked: true}, "93"},
 		{"child", engine.View{Task: model.Task{ID: 2, Title: "子タスク", Status: "todo"}, Depth: 1}, "38;2;0;215;255"},
 		{"grandchild", engine.View{Task: model.Task{ID: 2, Title: "孫", Status: "todo"}, Depth: 2}, "38;2;0;215;175"},
 		{"great grandchild", engine.View{Task: model.Task{ID: 2, Title: "ひ孫", Status: "todo"}, Depth: 3}, "38;2;95;159;255"},
-		{"repeat", engine.View{Task: model.Task{ID: 2, Title: "深い子", Status: "done"}, Depth: 5}, "38;2;0;215;255"},
+		{"repeat", engine.View{Task: model.Task{ID: 2, Title: "深い子", Status: "todo"}, Depth: 5}, "38;2;0;215;255"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, width := range []int{40, 60, 80, 120} {
@@ -448,7 +448,7 @@ func TestFixedPositionScroll(t *testing.T) {
 		{ID: 5, Title: "five", Status: "todo"},
 		{ID: 6, Title: "six", Status: "todo"},
 	}
-	m.height = 10 // three visible list lines
+	m.height = 11 // three visible list lines
 	m.refresh()
 	m.move(1)
 	anchor := func() int {
@@ -515,5 +515,53 @@ func TestScrollKeysAreTextWhenEditing(t *testing.T) {
 	press(m, "K")
 	if m.input.text != "JK" || m.offset != 0 || m.selected != 1 {
 		t.Fatal(m.input.text, m.offset, m.selected)
+	}
+}
+
+func TestListHeaderColumnAlignment(t *testing.T) {
+	m := testModel(t)
+	m.noColor = true
+	m.selected = 0
+	column := func(s, token string) int {
+		i := strings.Index(s, token)
+		if i < 0 {
+			t.Fatalf("missing %q in %q", token, s)
+		}
+		return ansi.StringWidth(s[:i])
+	}
+	for _, width := range []int{40, 59, 60, 79, 80, 100, 120} {
+		for _, digits := range []int{2, 3, 19} {
+			m.width, m.idWidth = width, digits
+			header := m.listHeader()
+			for _, tagged := range []bool{false, true} {
+				v := engine.View{Task: model.Task{ID: 1, Title: "日本語タスク", Status: "todo", DueDate: "2026-10-24"}, EffectiveProgress: 37, Context: tagged, Blocked: tagged}
+				if tagged {
+					v.ProgressMode = "manual"
+				}
+				row := m.row(v)
+				if ansi.StringWidth(header) != width || ansi.StringWidth(row) != width {
+					t.Fatalf("width=%d digits=%d\n%q\n%q", width, digits, header, row)
+				}
+				if column(header, "状態") != column(row, "[ ]") {
+					t.Fatal("status misaligned")
+				}
+				if column(header, "タスク") != column(row, "日") {
+					t.Fatal("task misaligned")
+				}
+				progress := " 37%"
+				if m.columns().bar {
+					progress = "[###"
+				}
+				if column(header, "進捗") != column(row, progress) {
+					t.Fatalf("progress misaligned: %q / %q", header, row)
+				}
+				if width >= 60 && column(header, "期日") != column(row, "2026-10-24") {
+					t.Fatal("date misaligned")
+				}
+				if width < 60 && strings.Contains(header, "期日") {
+					t.Fatal("hidden date has header")
+				}
+			}
+		}
 	}
 }
