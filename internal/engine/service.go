@@ -185,9 +185,29 @@ func Apply(d *model.Document, r Request, now time.Time) (int64, []int64, error) 
 			}
 		}
 	case "done":
+		children := map[int64][]model.Task{}
+		for _, child := range d.Tasks {
+			if child.ParentID != nil {
+				children[*child.ParentID] = append(children[*child.ParentID], child)
+			}
+		}
+		pending := []int64{t.ID}
+		seen := map[int64]bool{t.ID: true}
+		for i := 0; i < len(pending); i++ {
+			for _, child := range children[pending[i]] {
+				if child.Status != "done" {
+					return 0, nil, model.Err("InvalidInput", "cannot complete #%d: child #%d is incomplete", t.ID, child.ID)
+				}
+				if !seen[child.ID] {
+					seen[child.ID] = true
+					pending = append(pending, child.ID)
+				}
+			}
+		}
 		if t.Status != "done" {
 			t.Status = "done"
 			t.Progress = 100
+			t.ProgressMode = "auto"
 			t.CompletedAt = now.UTC().Format(time.RFC3339)
 		}
 	case "undone":

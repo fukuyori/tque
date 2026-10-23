@@ -24,7 +24,7 @@ func run(home string, args ...string) (string, error) {
 }
 func TestCommands(t *testing.T) {
 	h := t.TempDir()
-	for _, args := range [][]string{{"add", "親", "--due", "today"}, {"add", "子", "--parent", "1", "-p", "60"}, {"edit", "1", "--dep", "2"}, {"done", "1"}, {"undone", "1"}} {
+	for _, args := range [][]string{{"add", "親", "--due", "today"}, {"add", "子", "--parent", "1", "-p", "60"}, {"edit", "1", "--dep", "2"}, {"done", "2"}, {"done", "1"}, {"undone", "1"}, {"undone", "2"}, {"edit", "2", "-p", "60"}} {
 		if out, e := run(h, args...); e != nil {
 			t.Fatal(args, out, e)
 		}
@@ -56,6 +56,62 @@ func TestCommands(t *testing.T) {
 		t.Fatal(out, e)
 	}
 }
+func TestParentCompletionAndManualProgress(t *testing.T) {
+	h := t.TempDir()
+	exec := func(args ...string) string {
+		t.Helper()
+		out, err := run(h, args...)
+		if err != nil {
+			t.Fatal(args, out, err)
+		}
+		return out
+	}
+	rows := func() []engine.View {
+		t.Helper()
+		var rows []engine.View
+		if err := json.Unmarshal([]byte(exec("ls", "--all", "--json")), &rows); err != nil {
+			t.Fatal(err)
+		}
+		return rows
+	}
+	exec("add", "parent")
+	exec("add", "child", "--parent", "1", "-p", "100")
+	for _, progress := range []string{"0", "100"} {
+		exec("edit", "1", "-p", progress)
+		parent := rows()[0]
+		if parent.ProgressMode != "manual" || parent.Status != "todo" || parent.EffectiveProgress != parent.Progress {
+			t.Fatal(parent)
+		}
+		before := exec("ls", "--all", "--json")
+		if out, err := run(h, "done", "1"); err == nil || !strings.Contains(err.Error(), "child #2 is incomplete") {
+			t.Fatal(out, err)
+		}
+		if after := exec("ls", "--all", "--json"); before != after {
+			t.Fatal("rejected completion changed tasks")
+		}
+	}
+	exec("edit", "2", "-p", "40")
+	exec("edit", "1", "-p", "auto")
+	if parent := rows()[0]; parent.ProgressMode != "auto" || parent.EffectiveProgress != 40 || parent.Status != "todo" {
+		t.Fatal(parent)
+	}
+	exec("done", "2")
+	if rows()[0].Status != "todo" {
+		t.Fatal("parent completed automatically")
+	}
+	exec("edit", "1", "-p", "50")
+	exec("done", "1")
+	if parent := rows()[0]; parent.Status != "done" || parent.EffectiveProgress != 100 || parent.ProgressMode != "auto" {
+		t.Fatal(parent)
+	}
+	// An incomplete descendant must also block completion of its ancestors.
+	exec("add", "grandchild", "--parent", "2")
+	exec("undone", "1")
+	if out, err := run(h, "done", "1"); err == nil || !strings.Contains(err.Error(), "child #3 is incomplete") {
+		t.Fatal(out, err)
+	}
+}
+
 func TestOfflineHelpAndUsage(t *testing.T) {
 	h := t.TempDir()
 	if e := os.Mkdir(filepath.Join(h, ".tque"), 0700); e != nil {

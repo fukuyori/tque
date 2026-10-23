@@ -73,6 +73,9 @@ func TestMigrationAndStableReferences(t *testing.T) {
 	if err != nil || r.Changed || !bytes.Equal(unchanged, readBytes(t, path)) {
 		t.Fatal("no-op rewrote data", err)
 	}
+	if _, err := svc(s).Execute(context.Background(), nil, engine.Request{Op: "done", ID: 9}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := svc(s).Execute(context.Background(), nil, engine.Request{Op: "done", ID: 6}); err != nil {
 		t.Fatal(err)
 	}

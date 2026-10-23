@@ -25,8 +25,11 @@ func TestProgressAndStatus(t *testing.T) {
 	if Views(d)[1].EffectiveProgress != 61 {
 		t.Fatal(Views(d))
 	}
+	apply(t, &d, Request{Op: "done", ID: 2})
 	apply(t, &d, Request{Op: "done", ID: 1})
 	apply(t, &d, Request{Op: "undone", ID: 1})
+	apply(t, &d, Request{Op: "undone", ID: 2})
+	apply(t, &d, Request{Op: "edit", ID: 2, Patch: Patch{Progress: ptr("61")}})
 	if d.Tasks[0].Progress != 0 || Views(d)[1].EffectiveProgress != 61 || d.Tasks[0].Status != "todo" || d.Tasks[0].ProgressMode != "auto" {
 		t.Fatal(d)
 	}
@@ -59,12 +62,15 @@ func TestReopenResetsProgress(t *testing.T) {
 				apply(t, &d, Request{Op: "edit", ID: 2, Patch: Patch{Progress: ptr("60")}})
 			}
 			apply(t, &d, Request{Op: "done", ID: 2})
+			if child := d.Tasks[1]; child.Status != "done" || child.Progress != 100 || child.ProgressMode != "auto" || child.CompletedAt == "" {
+				t.Fatal("completion must set 100% and auto", child)
+			}
 			if Views(d)[1].EffectiveProgress != 100 {
 				t.Fatal("parent should reflect completed child")
 			}
 			apply(t, &d, Request{Op: "undone", ID: 2})
 			child := d.Tasks[1]
-			if child.Status != "todo" || child.Progress != 0 || child.CompletedAt != "" || child.ProgressMode != mode {
+			if child.Status != "todo" || child.Progress != 0 || child.CompletedAt != "" || child.ProgressMode != "auto" {
 				t.Fatal(child)
 			}
 			if Views(d)[1].EffectiveProgress != 0 || Views(d)[2].EffectiveProgress != 0 {
@@ -156,6 +162,9 @@ func TestGraphsRemovalAndFilters(t *testing.T) {
 	if len(rows) != 1 || rows[0].ID != 2 {
 		t.Fatal(rows)
 	}
+	apply(t, &d, Request{Op: "done", ID: 2})
+	apply(t, &d, Request{Op: "add", Patch: Patch{Title: ptr("dependency")}})
+	apply(t, &d, Request{Op: "edit", ID: 1, Patch: Patch{DepsSet: true, Deps: []int64{3}}})
 	apply(t, &d, Request{Op: "done", ID: 1})
 	if !Views(d)[1].Blocked {
 		t.Fatal("done must retain dependency warning")

@@ -354,7 +354,7 @@ There are two progress modes:
 
 For example, children at 20% and 80% give an automatic parent 50%. In deeper hierarchies, each parent averages its immediate children, not all leaf tasks together.
 
-**100% progress and completion are separate.** `-p 100` does not complete a task. `done` or Space completes it and sets progress to 100%, without completing its children.
+**100% progress and completion are separate.** Parents can have manual progress of 0% or 100%; the chosen value stays in effect until explicitly switching to `auto` or completing the task. Completing a task sets its progress to 100% and its progress mode to `auto`. `-p 100` does not complete a task. `done` or Space can complete a parent only when all its descendants have completed status. An incomplete child at 100% still blocks completion. Children are not completed in bulk, and parents do not complete automatically.
 
 The CLI rejects a numeric progress below 100 for a completed task. Use `undone ID` first, then `edit ID -p NUMBER`.
 
