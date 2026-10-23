@@ -358,7 +358,7 @@ For example, children at 20% and 80% give an automatic parent 50%. In deeper hie
 
 The CLI rejects a numeric progress below 100 for a completed task. Use `undone ID` first, then `edit ID -p NUMBER`.
 
-`undone` reopens the task but keeps the stored progress at 100%. Lower a manual value if needed; an automatic parent resumes calculating from children. Switching to automatic mode does not reset the stored value to zero. Removing the last child therefore reveals the previous stored value.
+Reopening a completed task with `undone` or Space in the TUI resets its stored progress to 0% without changing its progress mode. A task without children displays 0%; an automatic parent recalculates from its children. Reopening only the parent does not change its children's progress. Running `undone` on an already incomplete task leaves its progress unchanged.
 
 ## Storage configuration
 

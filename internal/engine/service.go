@@ -193,6 +193,7 @@ func Apply(d *model.Document, r Request, now time.Time) (int64, []int64, error) 
 	case "undone":
 		if t.Status != "todo" {
 			t.Status = "todo"
+			t.Progress = 0
 			t.CompletedAt = ""
 		}
 	case "rm":

@@ -27,11 +27,11 @@ func TestProgressAndStatus(t *testing.T) {
 	}
 	apply(t, &d, Request{Op: "done", ID: 1})
 	apply(t, &d, Request{Op: "undone", ID: 1})
-	if d.Tasks[0].Progress != 100 || Views(d)[1].EffectiveProgress != 61 || d.Tasks[0].Status != "todo" {
+	if d.Tasks[0].Progress != 0 || Views(d)[1].EffectiveProgress != 61 || d.Tasks[0].Status != "todo" || d.Tasks[0].ProgressMode != "auto" {
 		t.Fatal(d)
 	}
 	apply(t, &d, Request{Op: "rm", ID: 2})
-	if Views(d)[1].EffectiveProgress != 100 {
+	if Views(d)[1].EffectiveProgress != 0 {
 		t.Fatal(d)
 	}
 	apply(t, &d, Request{Op: "add", Patch: Patch{Title: ptr("新しい子"), ParentSet: true, Parent: ptr(int64(1))}})
@@ -46,6 +46,36 @@ func TestProgressAndStatus(t *testing.T) {
 	apply(t, &d, Request{Op: "edit", ID: 1, Patch: Patch{Progress: ptr("auto")}})
 	if Views(d)[1].EffectiveProgress != 100 || d.Tasks[0].Progress != 50 {
 		t.Fatal("auto lost stored progress")
+	}
+}
+
+func TestReopenResetsProgress(t *testing.T) {
+	for _, mode := range []string{"auto", "manual"} {
+		t.Run(mode, func(t *testing.T) {
+			d := model.Empty()
+			apply(t, &d, Request{Op: "add", Patch: Patch{Title: ptr("parent")}})
+			apply(t, &d, Request{Op: "add", Patch: Patch{Title: ptr("child"), ParentSet: true, Parent: ptr(int64(1))}})
+			if mode == "manual" {
+				apply(t, &d, Request{Op: "edit", ID: 2, Patch: Patch{Progress: ptr("60")}})
+			}
+			apply(t, &d, Request{Op: "done", ID: 2})
+			if Views(d)[1].EffectiveProgress != 100 {
+				t.Fatal("parent should reflect completed child")
+			}
+			apply(t, &d, Request{Op: "undone", ID: 2})
+			child := d.Tasks[1]
+			if child.Status != "todo" || child.Progress != 0 || child.CompletedAt != "" || child.ProgressMode != mode {
+				t.Fatal(child)
+			}
+			if Views(d)[1].EffectiveProgress != 0 || Views(d)[2].EffectiveProgress != 0 {
+				t.Fatal("child and automatic parent should return to zero", Views(d))
+			}
+			apply(t, &d, Request{Op: "edit", ID: 2, Patch: Patch{Progress: ptr("40")}})
+			apply(t, &d, Request{Op: "undone", ID: 2})
+			if d.Tasks[1].Progress != 40 {
+				t.Fatal("undone on an already incomplete task must preserve progress")
+			}
+		})
 	}
 }
 
