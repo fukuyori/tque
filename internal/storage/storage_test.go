@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -212,7 +211,7 @@ func TestSavedDocumentHasNoIDCounter(t *testing.T) {
 		t.Fatal(e)
 	}
 	b := readBytes(t, filepath.Join(s.Dir, "tasks.json"))
-	if bytes.Contains(b, []byte("next_id")) || !bytes.Contains(b, []byte(`"schema_version": 2`)) {
+	if bytes.Contains(b, []byte("next_id")) || !bytes.Contains(b, []byte(`"schema_version": 3`)) {
 		t.Fatal(string(b))
 	}
 }
@@ -289,7 +288,7 @@ func TestNoOpEmptyDependenciesAndExhaustion(t *testing.T) {
 	}
 	d := r.Document
 	d.Revision = 9223372036854775807
-	b, _ := json.Marshal(d)
+	b, _ := encode(d)
 	p := filepath.Join(s.Dir, "tasks.json")
 	_ = os.WriteFile(p, b, 0600)
 	if _, e := svc(s).Execute(ctx, nil, addRequest("overflow")); e == nil {
@@ -301,6 +300,7 @@ func TestNoOpEmptyDependenciesAndExhaustion(t *testing.T) {
 }
 
 func FuzzDecode(f *testing.F) {
+	f.Add([]byte(`{"schema_version":3,"revision":1,"tasks":[{"id":1,"internal_id":"a","title":"parent","status":"todo","progress":0,"progress_mode":"auto","created_at":"2026-10-21T00:00:00Z"},{"id":2,"internal_id":"b","parent_internal_id":"a","depends_on_internal_ids":["a"],"title":"child","status":"todo","progress":0,"progress_mode":"auto","created_at":"2026-10-21T00:00:00Z"}]}`))
 	f.Add([]byte(`{"schema_version":2,"revision":0,"tasks":[]}`))
 	f.Add([]byte(`{"schema_version":2,"revision":null,"tasks":[]}`))
 	f.Add([]byte(`{"schema_version":2,"revision":1,"tasks":[{"id":1,"title":"seed","status":"todo","progress":0,"progress_mode":"auto","created_at":"2026-10-21T00:00:00Z","due_date":"2026-10-22"}]}`))
@@ -308,7 +308,7 @@ func FuzzDecode(f *testing.F) {
 	f.Fuzz(func(t *testing.T, b []byte) {
 		d, e := Decode(b)
 		if e == nil {
-			encoded, err := json.Marshal(d)
+			encoded, err := encode(d)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -316,7 +316,7 @@ func FuzzDecode(f *testing.F) {
 			if err != nil {
 				t.Fatal("re-encoded document rejected", err)
 			}
-			encodedAgain, err := json.Marshal(roundTrip)
+			encodedAgain, err := encode(roundTrip)
 			if err != nil || !bytes.Equal(encoded, encodedAgain) {
 				t.Fatal("round trip changed document", err)
 			}

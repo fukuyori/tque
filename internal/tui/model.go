@@ -21,6 +21,7 @@ type Model struct {
 	doc                            model.Document
 	views                          map[int64]engine.View
 	rows                           []engine.View
+	treePrefixes                   map[int64]string
 	children                       map[int64][]int64
 	selected                       int64
 	width, height, offset, matched int
@@ -103,6 +104,7 @@ func (m *Model) refresh() {
 			hide = r.Depth
 		}
 	}
+	m.treePrefixes = engine.TreePrefixes(m.rows)
 	if m.index() < 0 {
 		m.selected = 0
 		for _, r := range m.rows {
@@ -123,7 +125,14 @@ func (m *Model) index() int {
 	return -1
 }
 func (m *Model) ensureVisible() {
-	i := m.index()
+	slots := m.listSlots()
+	i := -1
+	for line, row := range slots {
+		if row >= 0 && m.rows[row].ID == m.selected {
+			i = line
+			break
+		}
+	}
 	count := m.listHeight()
 	if i < 0 {
 		m.offset = 0
@@ -135,7 +144,19 @@ func (m *Model) ensureVisible() {
 	if i >= m.offset+count {
 		m.offset = i - count + 1
 	}
-	m.offset = max(0, min(m.offset, max(0, len(m.rows)-count)))
+	m.offset = max(0, min(m.offset, max(0, len(slots)-count)))
+}
+
+// Blank separators occupy screen space but are not selectable task rows.
+func (m *Model) listSlots() []int {
+	slots := make([]int, 0, len(m.rows))
+	for i := range m.rows {
+		if engine.TreeGap(m.rows, i) {
+			slots = append(slots, -1)
+		}
+		slots = append(slots, i)
+	}
+	return slots
 }
 func (m *Model) move(delta int) {
 	if len(m.rows) == 0 {
@@ -206,7 +227,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		wasUncertain := m.uncertain
-		m.doc = msg.doc
+		m.acceptDocument(msg.doc)
 		m.uncertain = false
 		m.mode = "list"
 		m.refresh()
@@ -229,10 +250,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.notice += " / rで再読込して確認。再送しません"
 			}
 			if msg.latest != nil {
-				m.doc = *msg.latest
+				numbersChanged := m.acceptDocument(*msg.latest)
 				m.refresh()
 				m.revision = m.doc.Revision
-				if _, ok := m.views[m.draftID]; !ok && m.mode != "add" && m.mode != "search" {
+				if numbersChanged && m.mode != "search" {
+					m.notice += " / 番号が変更されたため編集中止。入力案: " + m.input.text
+					m.mode = "list"
+				} else if _, ok := m.views[m.draftID]; !ok && m.mode != "add" && m.mode != "search" {
 					m.notice += " / 対象が消えたため編集中止。入力案: " + m.input.text
 					m.mode = "list"
 				} else {
@@ -244,7 +268,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.uncertain = true
 			}
 			if msg.result.Changed {
-				m.doc = msg.result.Document
+				m.acceptDocument(msg.result.Document)
 				m.refresh()
 				m.mode = "list"
 			}
@@ -252,7 +276,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		oldIndex := m.index()
 		id := msg.result.ID
-		m.doc = msg.result.Document
+		m.acceptDocument(msg.result.Document)
 		m.mode = "list"
 		m.input.set("")
 		// Expand the new/changed task's ancestors before rebuilding the view.
@@ -272,6 +296,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.notice = fmt.Sprintf("#%d 保存済み", id)
+		if len(msg.result.Renumbered) > 0 {
+			m.notice = "番号変更: " + engine.FormatIDChanges(msg.result.Renumbered)
+		}
 		if !msg.result.Changed {
 			m.notice = fmt.Sprintf("#%d 変更なし", id)
 		}
@@ -432,6 +459,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "o":
 			if m.sort == "id" {
 				m.sort = "due"
+			} else if m.sort == "due" {
+				m.sort = "name"
 			} else {
 				m.sort = "id"
 			}
@@ -489,6 +518,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.begin("child", "")
 			case "e":
 				m.begin("title", v.Title)
+			case "i":
+				m.begin("renumber", strconv.FormatInt(v.ID, 10))
 			case "s":
 				m.begin("start", v.StartDate)
 			case "d":
@@ -520,7 +551,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 func (m *Model) editing() bool {
 	switch m.mode {
-	case "add", "child", "title", "start", "due", "progress", "deps", "search":
+	case "add", "child", "title", "start", "due", "progress", "deps", "search", "renumber":
 		return true
 	}
 	return false
@@ -529,6 +560,12 @@ func (m *Model) request() (engine.Request, error) {
 	r := engine.Request{Op: "edit", ID: m.draftID}
 	s := m.input.text
 	switch m.mode {
+	case "renumber":
+		id, err := engine.ID(s)
+		if err != nil {
+			return r, err
+		}
+		r.Op, r.NewID = "renumber", id
 	case "add", "child":
 		r.Op = "add"
 		r.Patch.Title = &s
@@ -558,4 +595,43 @@ func (m *Model) request() (engine.Request, error) {
 		}
 	}
 	return r, nil
+}
+
+// acceptDocument preserves task identity across external or local renumbering.
+// A removed task must not silently select a different task reusing its number.
+func (m *Model) acceptDocument(next model.Document) bool {
+	oldKeys := map[int64]string{}
+	newIDs := map[string]int64{}
+	changed := false
+	for _, t := range m.doc.Tasks {
+		oldKeys[t.ID] = t.InternalID
+	}
+	for _, t := range next.Tasks {
+		if t.InternalID != "" {
+			newIDs[t.InternalID] = t.ID
+		}
+	}
+	translate := func(id int64) int64 {
+		key := oldKeys[id]
+		if key == "" {
+			return id
+		}
+		return newIDs[key]
+	}
+	for id, key := range oldKeys {
+		if key != "" && newIDs[key] != id {
+			changed = true
+		}
+	}
+	m.selected = translate(m.selected)
+	m.draftID = translate(m.draftID)
+	collapsed := map[int64]bool{}
+	for id, value := range m.collapsed {
+		if newID := translate(id); newID != 0 {
+			collapsed[newID] = value
+		}
+	}
+	m.collapsed = collapsed
+	m.doc = next
+	return changed
 }

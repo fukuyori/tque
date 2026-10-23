@@ -44,6 +44,8 @@ bash scripts/build-release.sh "$(go env GOOS)" "$(go env GOARCH)" ./.work/build
 
 実行ファイルをPATHの通った場所へ配置した場合の例です。例のIDは、追加時に表示された実際のIDに読み替えてください。
 
+表示用IDの付け直しは `tque renumber 8 6`（TUIでは `i`）で行います。変更先にタスクがあれば間の番号を1つずらし、親子・依存関係は固定の内部IDで維持します。schema 2のデータは読み込みだけでは書き換えず、初回の内容変更時に原本を `tasks.schema2.backup` に残してschema 3へ移行します。旧版はschema 3を読み込めません。
+
 ```text
 tque add "リリース準備" --due +7d
 tque add "保存処理を実装" --parent 1 -p 50
@@ -87,7 +89,7 @@ tque rm 1 --cascade
 | x / Delete | 削除確認。yで実行、n・Esc・Enterで取消 |
 | / | タイトル検索。入力中の左右は文字カーソル移動 |
 | f | 全件→未完了→今日まで→期限超過→着手可能 |
-| o | ID順・期日順を切替 |
+| o | ID順・期日順・名前順を切替 |
 | r | 保存データを再読込 |
 | ? | 操作ヘルプ。保存先・最新通知の全文も確認可能 |
 | q / Ctrl+C | 終了。入力中のqは文字として入力 |
@@ -119,12 +121,12 @@ Windowsの絶対パス例は`"D:/tque-data"`です。相対パスはconfig.json�
 `test-and-package`はブランチpush、`v*`タグのpush、pull request、手動実行で起動します。`VERSION`を検査し、Windows・macOS・Linuxでのテスト成功後、Ubuntu上で各OSのamd64／arm64向けに6種類のZIPを作成します。バージョンは`VERSION`から取得します。
 
 ```text
-tque-0.2.1-windows-amd64.zip
-tque-0.2.1-windows-arm64.zip
-tque-0.2.1-darwin-amd64.zip
-tque-0.2.1-darwin-arm64.zip
-tque-0.2.1-linux-amd64.zip
-tque-0.2.1-linux-arm64.zip
+tque-0.2.2-windows-amd64.zip
+tque-0.2.2-windows-arm64.zip
+tque-0.2.2-darwin-amd64.zip
+tque-0.2.2-darwin-arm64.zip
+tque-0.2.2-linux-amd64.zip
+tque-0.2.2-linux-arm64.zip
 ```
 
 `darwin`はmacOSです。ZIP内の同名ディレクトリに、アプリ本体（Windowsは`tque.exe`、macOS/Linuxは`tque`）、英語・日本語のREADME、CHANGELOG、docs全体（両言語の操作マニュアル・設計／レビュー記録・検証記録・チェックリスト・設定例）、LICENSE、依存ライセンスを同梱します。Unixの実行権限はZIP内に保持します。
@@ -133,9 +135,9 @@ GitHubの **Actions → test-and-package → 成功した実行 → Artifacts** 
 
 ### バージョンタグによるRelease公開
 
-`VERSION`の値と同じ名前のタグをpushします。例えば`0.2.1`です。先に公開対象のソースとワークフロー変更をコミット・pushし、そのコミットへタグを付けてください。タグとVERSIONが不一致なら、テストやパッケージ作成の前に停止します。形式は`v`を付けない`MAJOR.MINOR.PATCH`で、プレリリース用の接尾辞には対応しません。
+`VERSION`の値と同じ名前のタグをpushします。例えば`0.2.2`です。先に公開対象のソースとワークフロー変更をコミット・pushし、そのコミットへタグを付けてください。タグとVERSIONが不一致なら、テストやパッケージ作成の前に停止します。形式は`v`を付けない`MAJOR.MINOR.PATCH`で、プレリリース用の接尾辞には対応しません。
 
-3 OSのテストと6対象すべてのパッケージ作成に成功した後、同じ実行のArtifactsを取得してZIPとSHA256を確認し、`tque 0.2.1`というタイトルのReleaseを公開します。説明はGitHubが自動生成します。添付はZIP 6個と`.zip.sha256` 6個で、リポジトリのReleasesから直接取得できます。これらはアプリ本体であり、署名付きインストーラーではありません。
+3 OSのテストと6対象すべてのパッケージ作成に成功した後、同じ実行のArtifactsを取得してZIPとSHA256を確認し、`tque 0.2.2`というタイトルのReleaseを公開します。説明はGitHubが自動生成します。添付はZIP 6個と`.zip.sha256` 6個で、リポジトリのReleasesから直接取得できます。これらはアプリ本体であり、署名付きインストーラーではありません。
 
 公開するのは**タグのpush時だけ**です。ブランチpush・pull request・手動実行ではArtifactsの作成までに留めます。公開ジョブだけに組込み`GITHUB_TOKEN`の`contents: write`を付与し、個人アクセストークンは不要です。再実行しても既存Releaseを上書きしません。アップロードが失敗した場合は、残ったRelease／下書きと添付内容を確認してから再試行してください。タグの作成・pushは利用者が明示的に行います。[GitHub CLIのRelease作成仕様](https://cli.github.com/manual/gh_release_create)を参照しています。
 

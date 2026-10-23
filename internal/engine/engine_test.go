@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strconv"
 	"testing"
 	"time"
 	"tque/internal/model"
@@ -157,7 +158,7 @@ func TestDatesAndTitles(t *testing.T) {
 func TestDeepHierarchy(t *testing.T) {
 	d := model.Empty()
 	for i := int64(1); i <= 1001; i++ {
-		task := model.Task{ID: i, Title: "task", Status: "todo", ProgressMode: "auto", CreatedAt: "2026-10-21T00:00:00Z"}
+		task := model.Task{InternalID: strconv.FormatInt(i, 10), ID: i, Title: "task", Status: "todo", ProgressMode: "auto", CreatedAt: "2026-10-21T00:00:00Z"}
 		if i > 1 {
 			task.ParentID = ptr(i - 1)
 		}

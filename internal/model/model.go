@@ -3,6 +3,9 @@ package model
 import "fmt"
 
 type Task struct {
+	// InternalID is stable identity. ID and the in-memory relationship fields
+	// are display numbers; storage translates relationships to stable identities.
+	InternalID   string  `json:"-"`
 	ID           int64   `json:"id"`
 	Title        string  `json:"title"`
 	Status       string  `json:"status"`
@@ -22,8 +25,9 @@ type Document struct {
 	Tasks         []Task `json:"tasks"`
 }
 
-// SchemaVersion is the only supported storage format. Version 1 stored next_id.
-const SchemaVersion = 2
+// SchemaVersion stores relationships using stable internal identities.
+// Storage also reads version 2 and migrates it on the next successful write.
+const SchemaVersion = 3
 
 func Empty() Document { return Document{SchemaVersion: SchemaVersion, Tasks: []Task{}} }
 

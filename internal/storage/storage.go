@@ -42,7 +42,7 @@ func Decode(data []byte) (model.Document, error) {
 	if err := json.Unmarshal(raw["schema_version"], &schema); err != nil {
 		return bad(err)
 	}
-	if schema != model.SchemaVersion {
+	if schema != model.SchemaVersion && schema != 2 {
 		return d, model.Err("UnsupportedSchema", "schema_version=%d", schema)
 	}
 	if err := strictjson.Required(data, "revision", "tasks"); err != nil {
@@ -51,19 +51,43 @@ func Decode(data []byte) (model.Document, error) {
 	if err := strictjson.Allowed(data, "schema_version", "revision", "tasks"); err != nil {
 		return bad(err)
 	}
-	if err := strictjson.Decode(data, &d); err != nil {
-		return bad(err)
-	}
 	var tasks []json.RawMessage
 	if err := json.Unmarshal(raw["tasks"], &tasks); err != nil {
 		return bad(err)
 	}
 	for i, t := range tasks {
-		if err := strictjson.Allowed(t, "id", "title", "status", "progress", "progress_mode", "created_at", "completed_at", "parent_id", "depends_on", "start_date", "due_date"); err != nil {
+		allowed := []string{"id", "title", "status", "progress", "progress_mode", "created_at", "completed_at", "start_date", "due_date"}
+		if schema == 2 {
+			allowed = append(allowed, "parent_id", "depends_on")
+		} else {
+			allowed = append(allowed, "internal_id", "parent_internal_id", "depends_on_internal_ids")
+		}
+		if err := strictjson.Allowed(t, allowed...); err != nil {
 			return bad(err)
 		}
 		if err := strictjson.Required(t, "id", "title", "status", "progress", "progress_mode", "created_at"); err != nil {
 			return bad(fmt.Errorf("tasks[%d]: %w", i, err))
+		}
+		if schema == model.SchemaVersion {
+			if err := strictjson.Required(t, "internal_id"); err != nil {
+				return bad(err)
+			}
+		}
+	}
+	if schema == 2 {
+		if err := strictjson.Decode(data, &d); err != nil {
+			return bad(err)
+		}
+		d.SchemaVersion = model.SchemaVersion
+		// Deterministic identities keep read-only v2 loads stable until first save.
+		for i := range d.Tasks {
+			d.Tasks[i].InternalID = fmt.Sprintf("legacy-%d", d.Tasks[i].ID)
+		}
+	} else {
+		var err error
+		d, err = decodeCurrent(data)
+		if err != nil {
+			return bad(err)
 		}
 	}
 	if err := engine.Validate(d); err != nil {
@@ -182,8 +206,11 @@ func (s *Store) Update(ctx context.Context, expected *int64, mutate func(*model.
 	if e := engine.Validate(next); e != nil {
 		return d, e
 	}
-	beforeJSON, _ := json.Marshal(d)
-	afterJSON, marshalErr := json.Marshal(next)
+	beforeJSON, beforeErr := encode(d)
+	if beforeErr != nil {
+		return d, beforeErr
+	}
+	afterJSON, marshalErr := encode(next)
 	if marshalErr != nil {
 		return d, marshalErr
 	}
@@ -194,7 +221,7 @@ func (s *Store) Update(ctx context.Context, expected *int64, mutate func(*model.
 		return d, model.Err("InvalidInput", "revision exhausted")
 	}
 	next.Revision++
-	b, e := json.MarshalIndent(next, "", "  ")
+	b, e := encode(next)
 	if e != nil {
 		return d, e
 	}
@@ -203,6 +230,22 @@ func (s *Store) Update(ctx context.Context, expected *int64, mutate func(*model.
 		return d, e
 	}
 	if raw != nil {
+		var header struct {
+			SchemaVersion int `json:"schema_version"`
+		}
+		if json.Unmarshal(raw, &header) == nil && header.SchemaVersion == 2 {
+			// Retain the migration source separately from the rolling backup.
+			path := filepath.Join(s.Dir, "tasks.schema2.backup")
+			if existing, err := os.ReadFile(path); err == nil {
+				if !bytes.Equal(existing, raw) {
+					return d, model.Err("StorageFailure", "migration backup already exists with different contents: %s", path)
+				}
+			} else if !os.IsNotExist(err) {
+				return d, err
+			} else if _, err := s.atomic("tasks.schema2.backup", raw); err != nil {
+				return d, model.Err("StorageFailure", "migration backup failed: %v", err)
+			}
+		}
 		if _, e := s.atomic("tasks.json.backup", raw); e != nil {
 			return d, model.Err("StorageFailure", "backup failed; tasks.json unchanged: %v", e)
 		}

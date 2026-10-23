@@ -73,7 +73,12 @@ func Validate(d model.Document) error {
 		return model.Err("InvalidInput", "invalid document revision or tasks")
 	}
 	byID := map[int64]model.Task{}
+	identities := map[string]bool{}
 	for _, t := range d.Tasks {
+		if t.InternalID == "" || identities[t.InternalID] {
+			return model.Err("InvalidInput", "missing/duplicate internal ID for #%d", t.ID)
+		}
+		identities[t.InternalID] = true
 		if _, ok := byID[t.ID]; ok || t.ID <= 0 {
 			return model.Err("InvalidInput", "invalid/duplicate task ID #%d", t.ID)
 		}

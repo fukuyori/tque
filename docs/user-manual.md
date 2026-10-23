@@ -2,7 +2,7 @@
 
 [English](user-manual.md) | [日本語](user-manual.ja.md)
 
-Applies to tque 0.2.1.
+Applies to tque 0.2.2.
 
 tque is a terminal task manager. Use commands through its CLI or operate a task list with the keyboard through its TUI. Both interfaces use the same saved data. This manual is in English; it does not change the language of messages displayed by the application.
 
@@ -152,6 +152,10 @@ To remove these three practice tasks afterward, first check the parent ID and it
 
 ### Reading the screen
 
+Parent tasks with children have bold cyan titles. Completed tasks and child branch guides use dark gray. For incomplete tasks, overdue dates are red and today's dates are yellow; the dependency marker `!dep` is also yellow. Selection uses reverse video instead of these colors, and completed rows do not use warning colors. The exact colors depend on your terminal palette. Set `NO_COLOR` to a nonempty value to disable colors, bold text, and reverse video.
+
+The TUI and CLI `tque ls --tree` use `├─`, `└─`, and `│` to mark child tasks. One blank line separates a visible group of children from the next top-level task. Consecutive top-level tasks have no blank line between them. In the TUI, separators cannot be selected, and collapsing a parent's children also removes the separator after that group.
+
 The initial view is a tree of all tasks. The header shows the data location and search/filter information. The list occupies the center; selected-task information, the latest notification, and key hints appear below it. Press `?` to read the full data path and notification if they do not fit.
 
 | Marker | Meaning |
@@ -179,6 +183,7 @@ The layout is designed around 80 columns by 24 rows. Narrower or shorter termina
 | a | Add a task without a parent |
 | A | Add a child of the selected task |
 | e | Edit title |
+| i | Renumber the selected task |
 | s / d | Edit start / due date |
 | p | Edit progress: 0–100 or auto |
 | l (lowercase L) | Edit dependencies, for example 2,3 |
@@ -187,7 +192,7 @@ The layout is designed around 80 columns by 24 rows. Narrower or shorter termina
 | x / Delete | Open deletion confirmation |
 | / | Start a title search |
 | f | Cycle all → incomplete → due through today → overdue → ready → all |
-| o | Toggle ID/due-date sort |
+| o | Cycle ID → due date → name → ID |
 | Esc | Clear search; keep the filter selected with f |
 | r | Reload saved task data |
 | ? | Open help |
@@ -241,7 +246,20 @@ CLI deletion has no interactive confirmation. Check `ls --all --tree` before del
 
 A new task gets the highest existing ID (including completed tasks) plus one, or 1 if there are no tasks.
 
+Screen IDs, CLI arguments, and `ls --json` use display IDs. Stored tasks also have fixed internal IDs, used for parent and dependency references. There is no user command requiring internal IDs.
+
 Example: after deleting 3 from 1, 2, 3, the next new task gets 3.
+
+### Renumbering tasks
+
+Run `tque renumber 8 6` to move display ID 8 to 6. If 6 is occupied, the former 6 and 7 become 7 and 8. Moving 6 to 8 shifts the former 7 and 8 to 6 and 7. If the destination is unused, only the selected task changes. Using the same ID is a no-op; zero, negative, and out-of-range numbers are rejected.
+
+In the TUI, select a task and press `i`, enter the new number, then press `Enter` to save or `Esc` to cancel. Selection follows the same task, and the notification lists the changes. Name and due-date sorting remain active.
+
+Renumbering includes completed, filtered-out, and collapsed tasks. Moving a parent's number does not move its descendants as a block. Parent and dependency relationships continue to refer to the same tasks. If another operation changes numbers while you are editing, the TUI reports a conflict and cancels the edit. Check the current numbers before retrying. Subsequent CLI commands also interpret numbers as current display IDs.
+
+Storage uses schema 3. Schema 2 data is migrated in memory on read and written as schema 3 on the first successful content change. Reads and no-op commands do not rewrite it. The original is retained as `tasks.schema2.backup`, separately from the rolling `tasks.json.backup`. An existing migration backup with different contents is not overwritten; saving stops instead. Older versions cannot read schema 3. Schema 1 remains unsupported. `ls --json` is a display-ID listing, not a replacement for the storage file.
+
 
 ### Add and edit options
 
@@ -289,6 +307,7 @@ N must be between 0 and 36500. Dates do not include a time. If both dates exist,
 | --due-today | Incomplete tasks due today or earlier |
 | --overdue | Incomplete tasks due before today |
 | --ready | Incomplete tasks ready to start |
+| --sort name | Title in Unicode code-point order; ID breaks ties. No phonetic sorting of Japanese names |
 | --sort id | ID order; default |
 | --sort due | Due-date order; undated last, ID breaks ties |
 | --json | Output a JSON array |

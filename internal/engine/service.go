@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"math"
 	"slices"
 	"strconv"
@@ -30,12 +32,16 @@ type Request struct {
 	ID      int64
 	Patch   Patch
 	Cascade bool
+	NewID   int64
 }
+
+type IDChange struct{ From, To int64 }
 type Result struct {
-	Document model.Document
-	ID       int64
-	Removed  []int64
-	Changed  bool
+	Document   model.Document
+	ID         int64
+	Removed    []int64
+	Changed    bool
+	Renumbered []IDChange
 }
 
 func (s Service) Execute(ctx context.Context, expected *int64, r Request) (Result, error) {
@@ -49,7 +55,29 @@ func (s Service) Execute(ctx context.Context, expected *int64, r Request) (Resul
 	d, err := s.Repo.Update(ctx, expected, func(d *model.Document) error {
 		started = true
 		before = d.Revision
+		old := map[string]int64{}
+		if r.Op == "renumber" {
+			for _, t := range d.Tasks {
+				old[t.InternalID] = t.ID
+			}
+		}
 		id, removed, e := Apply(d, r, now)
+		if e == nil && r.Op == "renumber" {
+			for _, t := range d.Tasks {
+				if from := old[t.InternalID]; from != t.ID {
+					res.Renumbered = append(res.Renumbered, IDChange{From: from, To: t.ID})
+				}
+			}
+			slices.SortFunc(res.Renumbered, func(a, b IDChange) int {
+				if a.From < b.From {
+					return -1
+				}
+				if a.From > b.From {
+					return 1
+				}
+				return 0
+			})
+		}
 		res.ID = id
 		res.Removed = removed
 		return e
@@ -87,13 +115,22 @@ func Apply(d *model.Document, r Request, now time.Time) (int64, []int64, error) 
 			return 0, nil, e
 		}
 		r.ID = id
-		d.Tasks = append(d.Tasks, model.Task{ID: r.ID, Status: "todo", ProgressMode: "auto", CreatedAt: now.UTC().Format(time.RFC3339)})
+		var key [16]byte
+		if _, err := rand.Read(key[:]); err != nil {
+			return 0, nil, err
+		}
+		d.Tasks = append(d.Tasks, model.Task{InternalID: hex.EncodeToString(key[:]), ID: r.ID, Status: "todo", ProgressMode: "auto", CreatedAt: now.UTC().Format(time.RFC3339)})
 		idx = len(d.Tasks) - 1
 	} else if idx < 0 {
 		return 0, nil, model.Err("NotFound", "task #%d", r.ID)
 	}
 	t := &d.Tasks[idx]
 	switch r.Op {
+	case "renumber":
+		if err := Renumber(d, r.ID, r.NewID); err != nil {
+			return 0, nil, err
+		}
+		return r.NewID, nil, nil
 	case "add", "edit":
 		p := r.Patch
 		if r.Op == "edit" && p.Title == nil && p.Progress == nil && p.Start == nil && p.Due == nil && !p.ParentSet && !p.DepsSet {

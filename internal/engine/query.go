@@ -102,6 +102,9 @@ func Select(d model.Document, q Query) ([]View, int) {
 		}
 	}
 	less := func(a, b View) int {
+		if q.Sort == "name" && a.Title != b.Title {
+			return strings.Compare(a.Title, b.Title)
+		}
 		if q.Sort == "due" && a.DueDate != b.DueDate {
 			if a.DueDate == "" {
 				return 1

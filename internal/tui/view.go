@@ -70,10 +70,15 @@ func (m *Model) View() tea.View {
 		filters := []string{"全件", "未完了", "今日まで", "期限超過", "着手可能"}
 		lines = append(lines, "tque  保存先: "+safe(m.dir), fmt.Sprintf("表示:%s  並び:%s  一致:%d件  検索:%s", filters[m.filter], m.sort, m.matched, safe(m.search)), " ID  タスク / 状態                         進捗・期日")
 		count := m.listHeight()
+		slots := m.listSlots()
 		for i := 0; i < count; i++ {
 			idx := m.offset + i
-			if idx < len(m.rows) {
-				lines = append(lines, m.row(m.rows[idx]))
+			if idx < len(slots) {
+				if slots[idx] < 0 {
+					lines = append(lines, "")
+				} else {
+					lines = append(lines, m.row(m.rows[slots[idx]]))
+				}
 			} else if i == 0 {
 				if len(m.doc.Tasks) == 0 {
 					lines = append(lines, "タスクはまだありません。a:追加")
@@ -146,9 +151,11 @@ func (m *Model) row(v engine.View) string {
 	}
 	suffix := tags + " " + bar + progress + date
 	budget := max(1, m.width-ansi.StringWidth(prefix+suffix))
-	indent := strings.Repeat(" ", min(v.Depth*2, max(0, budget-16)))
-	if v.Depth*2 > len(indent) && len(indent) >= 2 {
-		indent = indent[:len(indent)-2] + ".."
+	indent := m.treePrefixes[v.ID]
+	// Preserve the immediate branch guide even when deep ancestors do not fit.
+	limit := max(3, budget-16)
+	if ansi.StringWidth(indent) > limit {
+		indent = ".." + ansi.Cut(indent, ansi.StringWidth(indent)-max(3, limit-2), ansi.StringWidth(indent))
 	}
 	branch := "  "
 	if len(m.children[v.ID]) > 0 {
@@ -157,16 +164,40 @@ func (m *Model) row(v engine.View) string {
 			branch = "> "
 		}
 	}
-	line := prefix + pad(indent+branch+safe(v.Title), budget) + suffix
+	title := safe(v.Title)
+	// Selection takes priority over semantic colors so reverse video remains
+	// uniform and readable across the whole selected row.
+	colored := !m.noColor && v.ID != m.selected
+	if colored && v.Status != "done" {
+		if len(m.children[v.ID]) > 0 {
+			title = lipgloss.NewStyle().Foreground(lipgloss.Color("14")).Bold(true).Render(title)
+		}
+		indent = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(indent)
+		if v.Blocked {
+			tags = strings.Replace(tags, "!dep", lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render("!dep"), 1)
+		}
+		if v.Status == "todo" && v.DueDate != "" {
+			if v.DueDate < m.today {
+				date = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(date)
+			} else if v.DueDate == m.today {
+				date = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render(date)
+			}
+		}
+	}
+	suffix = tags + " " + bar + progress + date
+	line := prefix + pad(indent+branch+title, budget) + suffix
 	line = fit(line, m.width)
 	if !m.noColor && v.ID == m.selected {
 		return lipgloss.NewStyle().Reverse(true).Render(line)
+	}
+	if colored && v.Status == "done" {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(line)
 	}
 	return line
 }
 func (m *Model) summary() []string {
 	if m.editing() {
-		label := map[string]string{"add": "新規（親なし）", "child": fmt.Sprintf("#%d の子を追加", m.draftID), "title": "タイトル", "start": "開始日", "due": "期日", "progress": "進捗", "deps": "依存ID", "search": "タイトル検索"}[m.mode]
+		label := map[string]string{"add": "新規（親なし）", "child": fmt.Sprintf("#%d の子を追加", m.draftID), "title": "タイトル", "renumber": "番号変更", "start": "開始日", "due": "期日", "progress": "進捗", "deps": "依存ID", "search": "タイトル検索"}[m.mode]
 		line := safe(m.input.text[:m.input.pos]) + "|" + safe(m.input.text[m.input.pos:])
 		pos := ansi.StringWidth(safe(m.input.text[:m.input.pos]))
 		left := max(0, pos-(m.width-4))
@@ -179,6 +210,8 @@ func (m *Model) summary() []string {
 			hint = "YYYY-MM-DD / today / +Nd / 空欄で解除"
 		case "progress":
 			hint = "0..100:手動固定 / auto:自動集計"
+		case "renumber":
+			hint = "新しい表示用ID（正の整数）。非表示のタスクも番号変更の対象"
 		case "deps":
 			hint = "カンマ区切りID / 空欄で解除"
 		}
@@ -251,7 +284,7 @@ func (m *Model) footer() string {
 func (m *Model) pageLines() []string {
 	var s string
 	if m.mode == "help" {
-		s = "移動\n上下/j/k:選択  左右:折り畳み・親子移動\nEnter:全文詳細  Esc:戻る\n\n追加・編集\na:親なしで追加  A:子として追加\ne:タイトル s:開始日 d:期日 p:進捗 l:依存先\nSpace:完了/未完了  +/-:進捗±10（手動固定）\nx/Delete:削除確認 y:削除 n/Esc/Enter:取消\n\n検索・表示\n/:タイトル検索 Enter:条件保持 Esc:開始前へ\n入力中は左右:文字移動、Space・j/k・?:入力文字\n検索適用後は左右:表示上の親子移動\nf:全件→未完了→今日まで→期限超過→着手可能\no:ID順/期日順 r:データ再読込\n一覧のEscは検索だけ解除（表示条件は維持）\n[manual]:手動固定 [context]:文脈用祖先 !dep:依存待ち\n期日の!:未完了で期限超過\n\n終了\nq/Ctrl+C:終了。入力中のqは文字\n保存中のCtrl+C:成功後に終了、失敗時は画面に戻る\n\n保存先\n" + safe(m.dir) + "\n\n最新の通知\n" + safe(m.notice)
+		s = "移動\n上下/j/k:選択  左右:折り畳み・親子移動\nEnter:全文詳細  Esc:戻る\n\n追加・編集\na:親なしで追加  A:子として追加\ni:番号変更 e:タイトル s:開始日 d:期日 p:進捗 l:依存先\nSpace:完了/未完了  +/-:進捗±10（手動固定）\nx/Delete:削除確認 y:削除 n/Esc/Enter:取消\n\n検索・表示\n/:タイトル検索 Enter:条件保持 Esc:開始前へ\n入力中は左右:文字移動、Space・j/k・?:入力文字\n検索適用後は左右:表示上の親子移動\nf:全件→未完了→今日まで→期限超過→着手可能\no:ID順/期日順/名前順 r:データ再読込\n一覧のEscは検索だけ解除（表示条件は維持）\n[manual]:手動固定 [context]:文脈用祖先 !dep:依存待ち\n期日の!:未完了で期限超過\n\n終了\nq/Ctrl+C:終了。入力中のqは文字\n保存中のCtrl+C:成功後に終了、失敗時は画面に戻る\n\n保存先\n" + safe(m.dir) + "\n\n最新の通知\n" + safe(m.notice)
 	} else {
 		v, ok := m.views[m.selected]
 		if !ok {

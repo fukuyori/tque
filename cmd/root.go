@@ -137,6 +137,29 @@ func New(o Options) *cobra.Command {
 		}
 		root.AddCommand(c)
 	}
+	renumber := &cobra.Command{Use: "renumber <id> <new-id>", Short: "表示用IDを付け直す", Args: func(_ *cobra.Command, a []string) error {
+		if len(a) != 2 {
+			return usage("renumber requires an ID and a new ID")
+		}
+		return nil
+	}, RunE: func(c *cobra.Command, a []string) error {
+		from, err := engine.ID(a[0])
+		if err != nil {
+			return usage("%v", err)
+		}
+		to, err := engine.ID(a[1])
+		if err != nil {
+			return usage("%v", err)
+		}
+		s, _, err := service()
+		if err != nil {
+			return err
+		}
+		r := engine.Request{Op: "renumber", ID: from, NewID: to}
+		res, err := s.Execute(c.Context(), nil, r)
+		return reportResult(c.OutOrStdout(), r, res, err)
+	}}
+	root.AddCommand(renumber)
 	list := &cobra.Command{Use: "ls", Short: "タスク一覧", Args: func(_ *cobra.Command, a []string) error {
 		if len(a) > 0 {
 			return usage("ls takes no arguments")
@@ -147,8 +170,8 @@ func New(o Options) *cobra.Command {
 		list.Flags().Bool(f, false, f)
 	}
 	list.Flags().String("search", "", "タイトルの部分一致検索")
-	list.Flags().String("sort", "id", "id または due")
-	_ = list.RegisterFlagCompletionFunc("sort", fixed("id", "due"))
+	list.Flags().String("sort", "id", "id、due または name")
+	_ = list.RegisterFlagCompletionFunc("sort", fixed("id", "due", "name"))
 	list.RunE = func(c *cobra.Command, _ []string) error {
 		b := func(n string) bool { v, _ := c.Flags().GetBool(n); return v }
 		str := func(n string) string { v, _ := c.Flags().GetString(n); return v }
@@ -159,8 +182,8 @@ func New(o Options) *cobra.Command {
 		if q.Blocked && q.Ready {
 			return usage("--blocked and --ready cannot be combined")
 		}
-		if q.Sort != "id" && q.Sort != "due" {
-			return usage("--sort must be id or due")
+		if q.Sort != "id" && q.Sort != "due" && q.Sort != "name" {
+			return usage("--sort must be id, due or name")
 		}
 		s, _, e := service()
 		if e != nil {
@@ -181,7 +204,12 @@ func New(o Options) *cobra.Command {
 			return e
 		}
 		prefixes := treePrefixes(rows)
-		for _, v := range rows {
+		for i, v := range rows {
+			if q.Tree && engine.TreeGap(rows, i) {
+				if _, e = fmt.Fprintln(c.OutOrStdout()); e != nil {
+					return e
+				}
+			}
 			prefix := ""
 			if q.Tree {
 				prefix = prefixes[v.ID]
@@ -316,36 +344,7 @@ func FormatTask(v engine.View) string {
 	return s
 }
 
-func treePrefixes(rows []engine.View) map[int64]string {
-	last := map[int64]int64{}
-	for _, v := range rows {
-		p := int64(0)
-		if v.ParentID != nil {
-			p = *v.ParentID
-		}
-		last[p] = v.ID
-	}
-	prefixes := map[int64]string{}
-	ancestorTail := map[int64]string{}
-	for _, v := range rows {
-		if v.ParentID == nil {
-			prefixes[v.ID] = ""
-			ancestorTail[v.ID] = ""
-			continue
-		}
-		p := *v.ParentID
-		stem := ancestorTail[p]
-		branch := "├─ "
-		tail := "│  "
-		if last[p] == v.ID {
-			branch = "└─ "
-			tail = "   "
-		}
-		prefixes[v.ID] = stem + branch
-		ancestorTail[v.ID] = stem + tail
-	}
-	return prefixes
-}
+func treePrefixes(rows []engine.View) map[int64]string { return engine.TreePrefixes(rows) }
 
 // Report a confirmed commit even if subsequent lock cleanup failed. Keep the
 // error so callers see a nonzero exit, but never hide the assigned task ID.
@@ -362,6 +361,8 @@ func printResult(w io.Writer, r engine.Request, res engine.Result) error {
 		s = fmt.Sprintf("[=] Unchanged task #%d", res.ID)
 	} else {
 		switch r.Op {
+		case "renumber":
+			s = "[*] Renumbered: " + engine.FormatIDChanges(res.Renumbered)
 		case "add":
 			for _, t := range res.Document.Tasks {
 				if t.ID == res.ID {

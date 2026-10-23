@@ -109,3 +109,94 @@ func TestReportCommittedResultWithCleanupError(t *testing.T) {
 		t.Fatal(out.String(), err)
 	}
 }
+
+func TestTreeGroupSpacing(t *testing.T) {
+	h := t.TempDir()
+	for _, args := range [][]string{{"add", "RootA"}, {"add", "ChildA", "--parent", "1"}, {"add", "RootC"}, {"add", "RootD"}} {
+		if out, err := run(h, args...); err != nil {
+			t.Fatal(out, err)
+		}
+	}
+	out, err := run(h, "ls", "--all", "--tree")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
+	if len(lines) != 5 || lines[2] != "" || !strings.HasPrefix(lines[1], "└─ ") || !strings.Contains(lines[3], "RootC") || !strings.Contains(lines[4], "RootD") {
+		t.Fatal(out)
+	}
+	out, err = run(h, "ls", "--all")
+	if err != nil || strings.Contains(out, "\n\n") {
+		t.Fatal(out, err)
+	}
+}
+
+func TestNameSort(t *testing.T) {
+	h := t.TempDir()
+	for _, args := range [][]string{{"add", "Zebra"}, {"add", "Apple"}, {"add", "あ"}, {"add", "Apple"}, {"add", "子B", "--parent", "2"}, {"add", "子A", "--parent", "2"}} {
+		if out, err := run(h, args...); err != nil {
+			t.Fatal(out, err)
+		}
+	}
+	out, err := run(h, "ls", "--sort", "name", "--json")
+	if err != nil {
+		t.Fatal(out, err)
+	}
+	var rows []engine.View
+	if err := json.Unmarshal([]byte(out), &rows); err != nil {
+		t.Fatal(err)
+	}
+	want := []int64{2, 4, 1, 3, 6, 5}
+	for i, id := range want {
+		if rows[i].ID != id {
+			t.Fatalf("name order: %v", rows)
+		}
+	}
+	out, err = run(h, "ls", "--sort", "name", "--tree")
+	if err != nil {
+		t.Fatal(out, err)
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if !strings.Contains(lines[0], "Apple") || !strings.Contains(lines[1], "子A") || !strings.Contains(lines[2], "子B") || lines[3] != "" || !strings.Contains(lines[4], "Apple") {
+		t.Fatal(out)
+	}
+}
+
+func TestRenumberCLI(t *testing.T) {
+	h := t.TempDir()
+	for _, args := range [][]string{{"add", "first"}, {"add", "second"}, {"add", "third"}, {"add", "child", "--parent", "3", "--dep", "1,2"}, {"done", "2"}} {
+		if out, err := run(h, args...); err != nil {
+			t.Fatal(out, err)
+		}
+	}
+	out, err := run(h, "renumber", "3", "1")
+	if err != nil || !strings.Contains(out, "1→2, 2→3, 3→1") {
+		t.Fatal(out, err)
+	}
+	out, err = run(h, "ls", "--all", "--json")
+	if err != nil || strings.Contains(out, "internal_id") {
+		t.Fatal(out, err)
+	}
+	var rows []engine.View
+	if err := json.Unmarshal([]byte(out), &rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows[0].Title != "third" || rows[2].Status != "done" || *rows[3].ParentID != 1 || len(rows[3].DependsOn) != 2 || rows[3].DependsOn[0] != 2 || rows[3].DependsOn[1] != 3 {
+		t.Fatal(out)
+	}
+	if out, err := run(h, "edit", "1", "--title", "changed", "--dep", "2"); err != nil {
+		t.Fatal(out, err)
+	}
+	out, err = run(h, "ls", "--all", "--json")
+	if err != nil || !strings.Contains(out, "changed") {
+		t.Fatal(out, err)
+	}
+	for _, args := range [][]string{{"renumber", "1"}, {"renumber", "1", "0"}, {"renumber", "1", "-1"}, {"renumber", "x", "1"}} {
+		if _, err := run(h, args...); ExitCode(err) != 2 {
+			t.Fatal(args, err)
+		}
+	}
+	if out, err := run(h, "renumber", "99", "1"); ExitCode(err) != 1 {
+		t.Fatal(out, err)
+	}
+}
