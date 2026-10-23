@@ -312,12 +312,15 @@ func TestTaskRowColors(t *testing.T) {
 		row   engine.View
 		color string
 	}{
-		{"parent", engine.View{Task: model.Task{ID: 1, Title: "親タスク", Status: "todo"}}, "96"},
-		{"done", engine.View{Task: model.Task{ID: 2, Title: "完了", Status: "done"}}, "90"},
+		{"parent", engine.View{Task: model.Task{ID: 1, Title: "親タスク", Status: "todo"}}, "38;2;255;255;255"},
+		{"done", engine.View{Task: model.Task{ID: 2, Title: "完了", Status: "done"}, Depth: 1}, "38;2;0;215;255"},
 		{"overdue", engine.View{Task: model.Task{ID: 3, Title: "期限切れ", Status: "todo", DueDate: "2026-10-20"}}, "91"},
 		{"today", engine.View{Task: model.Task{ID: 3, Title: "今日", Status: "todo", DueDate: m.today}}, "93"},
 		{"blocked", engine.View{Task: model.Task{ID: 3, Title: "待機", Status: "todo"}, Blocked: true}, "93"},
-		{"child", engine.View{Task: model.Task{ID: 2, Title: "子タスク", Status: "todo"}}, "90"},
+		{"child", engine.View{Task: model.Task{ID: 2, Title: "子タスク", Status: "todo"}, Depth: 1}, "38;2;0;215;255"},
+		{"grandchild", engine.View{Task: model.Task{ID: 2, Title: "孫", Status: "todo"}, Depth: 2}, "38;2;0;215;175"},
+		{"great grandchild", engine.View{Task: model.Task{ID: 2, Title: "ひ孫", Status: "todo"}, Depth: 3}, "38;2;95;159;255"},
+		{"repeat", engine.View{Task: model.Task{ID: 2, Title: "深い子", Status: "done"}, Depth: 5}, "38;2;0;215;255"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, width := range []int{40, 60, 80, 120} {
@@ -338,7 +341,7 @@ func TestTaskRowColors(t *testing.T) {
 	m.noColor = false
 	m.selected = 1
 	selected := m.row(engine.View{Task: model.Task{ID: 1, Title: "選択", Status: "done"}})
-	if !strings.Contains(selected, "\x1b[7m") || strings.Contains(selected, "90m") {
+	if !strings.Contains(selected, "\x1b[7m") || strings.Contains(selected, "38;2;") {
 		t.Fatalf("selection priority: %q", selected)
 	}
 }
@@ -431,5 +434,86 @@ func TestTUIRenumberAndExternalRefresh(t *testing.T) {
 	}
 	if engine.Views(d)[1].InternalID != keyBefore {
 		t.Fatal("stale edit changed task")
+	}
+}
+
+func TestFixedPositionScroll(t *testing.T) {
+	m := testModel(t)
+	one := int64(1)
+	m.doc.Tasks = []model.Task{
+		{ID: 1, Title: "root", Status: "todo"},
+		{ID: 2, Title: "child", ParentID: &one, Status: "todo"},
+		{ID: 3, Title: "next", Status: "todo"},
+		{ID: 4, Title: "four", Status: "todo"},
+		{ID: 5, Title: "five", Status: "todo"},
+		{ID: 6, Title: "six", Status: "todo"},
+	}
+	m.height = 10 // three visible list lines
+	m.refresh()
+	m.move(1)
+	anchor := func() int {
+		for i, row := range m.listSlots() {
+			if row >= 0 && m.rows[row].ID == m.selected {
+				return i - m.offset
+			}
+		}
+		return -1
+	}
+	if anchor() != 1 {
+		t.Fatal("initial anchor")
+	}
+	press(m, "J") // skip the group separator
+	if m.offset != 2 || m.selected != 3 || anchor() != 1 {
+		t.Fatal(m.offset, m.selected, anchor())
+	}
+	press(m, "K")
+	if m.offset != 0 || m.selected != 2 || anchor() != 1 {
+		t.Fatal(m.offset, m.selected, anchor())
+	}
+	press(m, "K")
+	if m.offset != 0 || m.selected != 2 {
+		t.Fatal("scrolled past start")
+	}
+	for range 10 {
+		press(m, "J")
+		if anchor() != 1 {
+			t.Fatal("anchor moved")
+		}
+	}
+	if m.offset != 4 || m.selected != 5 {
+		t.Fatal("end boundary", m.offset, m.selected)
+	}
+	press(m, "j")
+	if m.selected != 6 {
+		t.Fatal("lowercase navigation changed")
+	}
+	press(m, "k")
+	if m.selected != 5 {
+		t.Fatal("lowercase navigation changed")
+	}
+	m.height = 30
+	m.ensureVisible()
+	before := m.selected
+	press(m, "J")
+	if m.offset != 0 || m.selected != before {
+		t.Fatal("scrolled fully visible list")
+	}
+	m.doc.Tasks = nil
+	m.refresh()
+	press(m, "J")
+	press(m, "K")
+	if m.offset != 0 || m.selected != 0 {
+		t.Fatal("empty list moved")
+	}
+}
+
+func TestScrollKeysAreTextWhenEditing(t *testing.T) {
+	m := testModel(t)
+	press(m, "e")
+	m.input.set("")
+	press(m, "J")
+	press(m, "K")
+	if m.input.text != "JK" || m.offset != 0 || m.selected != 1 {
+		t.Fatal(m.input.text, m.offset, m.selected)
 	}
 }

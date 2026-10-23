@@ -168,12 +168,18 @@ func (m *Model) row(v engine.View) string {
 	// Selection takes priority over semantic colors so reverse video remains
 	// uniform and readable across the whole selected row.
 	colored := !m.noColor && v.ID != m.selected
-	if colored && v.Status != "done" {
-		if len(m.children[v.ID]) > 0 {
-			title = lipgloss.NewStyle().Foreground(lipgloss.Color("14")).Bold(true).Render(title)
+	if colored {
+		// Bright, saturated cool colors keep each level visible on dark backgrounds.
+		palette := [...]string{"#00D7FF", "#00D7AF", "#5F9FFF", "#AF87FF"}
+		color := "#FFFFFF"
+		if v.Depth > 0 {
+			color = palette[(v.Depth-1)%len(palette)]
 		}
-		indent = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(indent)
-		if v.Blocked {
+		style := lipgloss.NewStyle().Foreground(lipgloss.Color(color))
+		title = style.Bold(len(m.children[v.ID]) > 0).Render(title)
+		indent = style.Render(indent)
+		branch = style.Render(branch)
+		if v.Blocked && v.Status != "done" {
 			tags = strings.Replace(tags, "!dep", lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render("!dep"), 1)
 		}
 		if v.Status == "todo" && v.DueDate != "" {
@@ -189,9 +195,6 @@ func (m *Model) row(v engine.View) string {
 	line = fit(line, m.width)
 	if !m.noColor && v.ID == m.selected {
 		return lipgloss.NewStyle().Reverse(true).Render(line)
-	}
-	if colored && v.Status == "done" {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(line)
 	}
 	return line
 }
@@ -284,7 +287,7 @@ func (m *Model) footer() string {
 func (m *Model) pageLines() []string {
 	var s string
 	if m.mode == "help" {
-		s = "移動\n上下/j/k:選択  左右:折り畳み・親子移動\nEnter:全文詳細  Esc:戻る\n\n追加・編集\na:親なしで追加  A:子として追加\ni:番号変更 e:タイトル s:開始日 d:期日 p:進捗 l:依存先\nSpace:完了/未完了  +/-:進捗±10（手動固定）\nx/Delete:削除確認 y:削除 n/Esc/Enter:取消\n\n検索・表示\n/:タイトル検索 Enter:条件保持 Esc:開始前へ\n入力中は左右:文字移動、Space・j/k・?:入力文字\n検索適用後は左右:表示上の親子移動\nf:全件→未完了→今日まで→期限超過→着手可能\no:ID順/期日順/名前順 r:データ再読込\n一覧のEscは検索だけ解除（表示条件は維持）\n[manual]:手動固定 [context]:文脈用祖先 !dep:依存待ち\n期日の!:未完了で期限超過\n\n終了\nq/Ctrl+C:終了。入力中のqは文字\n保存中のCtrl+C:成功後に終了、失敗時は画面に戻る\n\n保存先\n" + safe(m.dir) + "\n\n最新の通知\n" + safe(m.notice)
+		s = "移動\n上下/j/k:選択  左右:折り畳み・親子移動\nJ/K:選択位置固定で下/上へスクロール（空行は飛ばす）\nEnter:全文詳細  Esc:戻る\n\n追加・編集\na:親なしで追加  A:子として追加\ni:番号変更 e:タイトル s:開始日 d:期日 p:進捗 l:依存先\nSpace:完了/未完了  +/-:進捗±10（手動固定）\nx/Delete:削除確認 y:削除 n/Esc/Enter:取消\n\n検索・表示\n/:タイトル検索 Enter:条件保持 Esc:開始前へ\n入力中は左右:文字移動、Space・j/k・?:入力文字\n検索適用後は左右:表示上の親子移動\nf:全件→未完了→今日まで→期限超過→着手可能\no:ID順/期日順/名前順 r:データ再読込\n一覧のEscは検索だけ解除（表示条件は維持）\n[manual]:手動固定 [context]:文脈用祖先 !dep:依存待ち\n期日の!:未完了で期限超過\n\n終了\nq/Ctrl+C:終了。入力中のqは文字\n保存中のCtrl+C:成功後に終了、失敗時は画面に戻る\n\n保存先\n" + safe(m.dir) + "\n\n最新の通知\n" + safe(m.notice)
 	} else {
 		v, ok := m.views[m.selected]
 		if !ok {

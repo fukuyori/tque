@@ -166,6 +166,38 @@ func (m *Model) move(delta int) {
 	m.selected = m.rows[i].ID
 	m.ensureVisible()
 }
+
+// Scroll the viewport while keeping selection on the same screen line.
+// Skip separator lines, and leave both viewport and selection unchanged if
+// no task can occupy that line before reaching the viewport boundary.
+func (m *Model) scrollFixed(delta int) {
+	slots := m.listSlots()
+	line := -1
+	for i, row := range slots {
+		if row >= 0 && m.rows[row].ID == m.selected {
+			line = i
+			break
+		}
+	}
+	anchor := line - m.offset
+	if line < 0 || anchor < 0 || anchor >= m.listHeight() || delta == 0 {
+		return
+	}
+	step := 1
+	if delta < 0 {
+		step = -1
+	}
+	last := max(0, len(slots)-m.listHeight())
+	for offset := m.offset + step; offset >= 0 && offset <= last; offset += step {
+		row := slots[offset+anchor]
+		if row < 0 {
+			continue
+		}
+		m.offset = offset
+		m.selected = m.rows[row].ID
+		return
+	}
+}
 func (m *Model) begin(mode, value string) {
 	m.mode = mode
 	m.input.set(value)
@@ -437,6 +469,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.move(-1)
 		case "down", "j":
 			m.move(1)
+		case "J", "shift+j", "shift+J":
+			m.scrollFixed(1)
+		case "K", "shift+k", "shift+K":
+			m.scrollFixed(-1)
 		case "pgup":
 			m.move(-m.listHeight())
 		case "pgdown":

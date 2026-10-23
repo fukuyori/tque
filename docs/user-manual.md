@@ -150,9 +150,11 @@ To remove these three practice tasks afterward, first check the parent ID and it
 
 ## Using the TUI
 
+In the task list, uppercase `J` / `K` scroll down / up while keeping the selected screen line fixed. The task arriving on that line becomes selected. Blank separators are skipped; scrolling stops at the viewport boundaries. In input fields, these keys enter text.
+
 ### Reading the screen
 
-Parent tasks with children have bold cyan titles. Completed tasks and child branch guides use dark gray. For incomplete tasks, overdue dates are red and today's dates are yellow; the dependency marker `!dep` is also yellow. Selection uses reverse video instead of these colors, and completed rows do not use warning colors. The exact colors depend on your terminal palette. Set `NO_COLOR` to a nonempty value to disable colors, bold text, and reverse video.
+Top-level titles and branch guides are white. Child levels cycle through cyan, teal, blue, and purple by depth. Parent titles are bold. Completed tasks retain their level color and use `[x]` to indicate completion. For incomplete tasks, overdue dates are red and today's dates are yellow; the dependency marker `!dep` is also yellow. Selection uses reverse video instead of these colors, and completed rows do not use warning colors. The exact colors depend on your terminal palette. Set `NO_COLOR` to a nonempty value to disable colors, bold text, and reverse video.
 
 The TUI and CLI `tque ls --tree` use `├─`, `└─`, and `│` to mark child tasks. One blank line separates a visible group of children from the next top-level task. Consecutive top-level tasks have no blank line between them. In the TUI, separators cannot be selected, and collapsing a parent's children also removes the separator after that group.
 
