@@ -68,7 +68,7 @@ Use `tque renumber 8 6` (or `i` in the TUI) to move display ID 8 to 6; occupied 
 - `--dep 2,3 --dep 4` accepts multiple dependencies. Editing replaces the entire dependency list.
 - Use `none` with `edit --parent`, `--dep`, `--start`, or `--due` to clear an attribute.
 - `--tree --json` and `--ready --blocked` are invalid combinations.
-- Progress of 100% does not automatically complete a task. Completing a parent does not complete its children.
+- Progress of 100% does not automatically complete a task. Completing a parent does not complete its children; a parent can be completed only when all of its descendants are completed.
 - Automatic progress averages the displayed progress of immediate children. `[manual]` indicates a fixed manual value.
 - Incomplete dependencies produce a warning; they do not prevent editing or completion. Tasks referenced by dependencies outside the deletion set cannot be deleted.
 - `rm ID` deletes without a confirmation prompt. `rm ID --cascade` also deletes all descendants. There is no undo.
@@ -83,10 +83,13 @@ Run `tque` without arguments, or use `tque --tui`, in an interactive terminal.
 | Key | Action |
 | --- | --- |
 | Up/Down or k/j | Move selection |
+| PageUp / PageDown | Move by a page |
+| J / K | Scroll down / up while keeping the selected screen line fixed |
 | Left/Right | Collapse, expand, or navigate between parent and child |
 | Enter / Esc | Open full details / return |
 | a / A | Add a root task / child of the selected task |
 | e / s / d / p / l | Edit title / start / due / progress / dependencies |
+| i | Renumber the selected task |
 | Space | Toggle completed/incomplete |
 | + / - | Change progress by 10 and switch to manual mode |
 | x / Delete | Confirm deletion: y deletes; n, Esc, or Enter cancels |

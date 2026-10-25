@@ -3,6 +3,7 @@ package tui
 import (
 	tea "charm.land/bubbletea/v2"
 	"context"
+	"fmt"
 	"github.com/charmbracelet/x/ansi"
 	"os"
 	"path/filepath"
@@ -599,6 +600,63 @@ func TestListHeaderColumnAlignment(t *testing.T) {
 				}
 				if width < 60 && strings.Contains(header, "期日") {
 					t.Fatal("hidden date has header")
+				}
+			}
+		}
+	}
+}
+
+// Indentation, branch markers, and tags must stay inside the task column even
+// when large IDs leave little room for titles.
+func TestIndentedRowAlignmentWithLargeIDs(t *testing.T) {
+	m := testModel(t)
+	m.noColor = true
+	m.selected = 0
+	column := func(s, token string) int {
+		i := strings.Index(s, token)
+		if i < 0 {
+			t.Fatalf("missing %q in %q", token, s)
+		}
+		return ansi.StringWidth(s[:i])
+	}
+	prefixes := []string{"", "└─ ", "│  ├─ ", strings.Repeat("│  ", 12) + "└─ "}
+	for _, width := range []int{40, 59, 60, 79, 80, 100, 120} {
+		for _, digits := range []int{2, 3, 19} {
+			m.width, m.idWidth = width, digits
+			header := m.listHeader()
+			for _, prefix := range prefixes {
+				for _, branch := range []string{"none", "expanded", "collapsed"} {
+					for _, tagged := range []bool{false, true} {
+						m.treePrefixes = map[int64]string{1: prefix}
+						m.children = map[int64][]int64{}
+						m.collapsed = map[int64]bool{}
+						if branch != "none" {
+							m.children[1] = []int64{2}
+							m.collapsed[1] = branch == "collapsed"
+						}
+						v := engine.View{Task: model.Task{ID: 1, Title: "日本語タスクのタイトル", Status: "todo", DueDate: "2026-10-24"}, EffectiveProgress: 37, Context: tagged, Blocked: tagged, Depth: strings.Count(prefix, "─")}
+						if tagged {
+							v.ProgressMode = "manual"
+						}
+						row := m.row(v)
+						name := fmt.Sprintf("width=%d digits=%d prefix=%q branch=%s tagged=%v", width, digits, prefix, branch, tagged)
+						if ansi.StringWidth(row) != width {
+							t.Fatalf("%s: row width %d\n%q", name, ansi.StringWidth(row), row)
+						}
+						if column(header, "状態") != column(row, "[ ]") {
+							t.Fatalf("%s: status misaligned\n%q\n%q", name, header, row)
+						}
+						progress := " 37%"
+						if m.columns().bar {
+							progress = "[###"
+						}
+						if column(header, "進捗") != column(row, progress) {
+							t.Fatalf("%s: progress misaligned\n%q\n%q", name, header, row)
+						}
+						if width >= 60 && column(header, "期日") != column(row, "2026-10-24") {
+							t.Fatalf("%s: date misaligned\n%q\n%q", name, header, row)
+						}
+					}
 				}
 			}
 		}
