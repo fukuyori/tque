@@ -66,6 +66,12 @@ func Run(ctx context.Context, s engine.Service, dir string) error {
 func New(s engine.Service, dir string, d model.Document) *Model {
 	m := &Model{service: s, ctx: context.Background(), dir: dir, doc: d, width: 80, height: 24, collapsed: map[int64]bool{}, sort: "id", mode: "list", noColor: os.Getenv("NO_COLOR") != ""}
 	m.today = m.now().Format(time.DateOnly)
+	// Start with every parent collapsed; tasks that become parents later stay expanded.
+	for _, t := range d.Tasks {
+		if t.ParentID != nil {
+			m.collapsed[*t.ParentID] = true
+		}
+	}
 	m.refresh()
 	return m
 }

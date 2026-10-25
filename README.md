@@ -99,6 +99,8 @@ Run `tque` without arguments, or use `tque --tui`, in an interactive terminal.
 
 Enter saves an attribute; Esc cancels. Empty date or dependency input clears it. In search input, Enter keeps the query and Esc restores the previous query. Esc in the task list clears only the search, keeping the filter.
 
+The TUI starts with every parent collapsed, showing only top-level tasks. Expanding a parent shows its immediate children; deeper parents stay collapsed. Reloading with `r` keeps your expanded/collapsed state.
+
 Filtered trees retain ancestors as `[context]`; they are excluded from the match count. `!dep` means an incomplete dependency; `!` after a due date marks an overdue incomplete task.
 
 Each change is saved individually. Update keys pressed during a save are ignored. During a save, only Ctrl+C requests exit after success; q is ignored. Conflicts reload the latest data and retain the draft for explicit reconfirmation.

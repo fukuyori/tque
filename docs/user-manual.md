@@ -144,7 +144,7 @@ Completing all children brings the parent to 100%, but does not automatically ma
 
 ### 5. Inspect the result in the TUI
 
-Start `tque` to see the same three tasks in the tree. If it is already open, press `r` to reload and use `f` to select all tasks. Select the parent and press Left to collapse it or Right to expand it. Enter opens details; Esc returns to the list.
+Start `tque` to see the same tasks in the tree. The TUI starts with every parent collapsed, so only the parent is shown at first. If it is already open, press `r` to reload and use `f` to select all tasks. Select the parent and press Right to expand it or Left to collapse it. Enter opens details; Esc returns to the list.
 
 To remove these three practice tasks afterward, first check the parent ID and its children with `tque ls --all --tree`, then run `tque rm 1 --cascade`, replacing `1` with the actual parent ID. This command deletes the parent and its children without a confirmation prompt.
 
@@ -217,6 +217,8 @@ Deletion confirmation shows the selected task ID and total number of tasks to re
 Press `/` and type to search titles immediately using a case-insensitive substring match. Enter keeps the query and returns to list navigation; Esc while editing restores the query that was active before editing. Regular expressions and fuzzy matching are not supported.
 
 Search and the `f` filter are combined with AND. Ancestors of matching tasks remain visible as `[context]` but do not count as matches. While searching or filtering, matching paths are expanded and Left/Right navigate between parents and children. Clearing the conditions restores the previous collapsed state.
+
+At startup, every task with children is collapsed and only top-level tasks are shown. Expanding a parent shows its immediate children; deeper parents remain collapsed. This happens only at startup: reloading with `r` keeps your current expanded/collapsed state, and a task that gains children after startup is shown expanded.
 
 “Due through today” includes incomplete tasks due today or earlier. “Overdue” includes incomplete tasks due before today. “Ready” means incomplete, with no incomplete dependencies, and with a start date that is absent or no later than today.
 

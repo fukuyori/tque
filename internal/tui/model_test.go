@@ -301,6 +301,45 @@ func TestTreeSpacingAndScrolling(t *testing.T) {
 	}
 }
 
+func TestStartupCollapsesAllParents(t *testing.T) {
+	m := testModel(t)
+	one, two := int64(1), int64(2)
+	m.doc.Tasks = []model.Task{
+		{ID: 1, Title: "Root", Status: "todo"},
+		{ID: 2, Title: "Child", ParentID: &one, Status: "todo"},
+		{ID: 3, Title: "Grandchild", ParentID: &two, Status: "todo"},
+		{ID: 4, Title: "Other", Status: "todo"},
+	}
+	m = New(m.service, m.dir, m.doc)
+	ids := func() []int64 {
+		out := []int64{}
+		for _, r := range m.rows {
+			out = append(out, r.ID)
+		}
+		return out
+	}
+	if got := ids(); len(got) != 2 || got[0] != 1 || got[1] != 4 || m.selected != 1 {
+		t.Fatal("startup rows", got, m.selected)
+	}
+	press(m, "right")
+	if got := ids(); len(got) != 3 || got[1] != 2 {
+		t.Fatal("root expansion should keep grandchildren collapsed", got)
+	}
+	m.search = "Grandchild"
+	m.refresh()
+	if len(m.rows) != 3 {
+		t.Fatal("search should reveal collapsed path", ids())
+	}
+	m.search = ""
+	m.refresh()
+	five := int64(4)
+	m.doc.Tasks = append(m.doc.Tasks, model.Task{ID: 5, Title: "Later", ParentID: &five, Status: "todo"})
+	m.Update(readMsg{doc: m.doc})
+	if got := ids(); len(got) != 4 || got[3] != 5 || !m.collapsed[2] || m.collapsed[4] {
+		t.Fatal("reload should keep state and leave new parents expanded", got)
+	}
+}
+
 func TestTaskRowColors(t *testing.T) {
 	m := testModel(t)
 	m.noColor = false
