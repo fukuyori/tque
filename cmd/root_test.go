@@ -142,6 +142,66 @@ func TestTreeBranches(t *testing.T) {
 	}
 }
 
+func TestRootOption(t *testing.T) {
+	h := t.TempDir()
+	for _, args := range [][]string{{"add", "Blog"}, {"add", "Design", "--parent", "1"}, {"add", "Draft", "--parent", "2"}, {"add", "Work"}, {"add", "design", "--parent", "4"}} {
+		if out, e := run(h, args...); e != nil {
+			t.Fatal(args, out, e)
+		}
+	}
+	out, e := run(h, "ls", "--all", "--tree", "--root", "2")
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if e != nil || len(lines) != 2 || !strings.HasPrefix(lines[0], "2 [ ] Design") || !strings.HasPrefix(lines[1], "└─ 3 [ ] Draft") {
+		t.Fatalf("%q %v", out, e)
+	}
+	out, e = run(h, "ls", "--root", " Work ", "--json")
+	var rows []engine.View
+	if e != nil || json.Unmarshal([]byte(out), &rows) != nil || len(rows) != 2 || rows[0].ID != 4 || rows[1].ID != 5 {
+		t.Fatal(out, e)
+	}
+	// Several matches: candidates go to the error, nothing to stdout.
+	c := New(Options{Version: "test", Home: func() (string, error) { return h, nil }})
+	stdout := &bytes.Buffer{}
+	c.SetOut(stdout)
+	c.SetArgs([]string{"ls", "--root", "DESIGN"})
+	e = c.ExecuteContext(context.Background())
+	if ExitCode(e) != 1 || stdout.Len() != 0 || !strings.Contains(e.Error(), "#2 Blog > Design, #5 Work > design") {
+		t.Fatal(stdout.String(), e)
+	}
+	if _, e := run(h, "ls", "--root", "missing"); ExitCode(e) != 1 || !strings.Contains(e.Error(), "NotFound") {
+		t.Fatal(e)
+	}
+	for _, args := range [][]string{{"ls", "--root", "  "}, {"--root", ""}, {"--root", "a\tb"}, {"add", "x", "--root", "1"}, {"done", "1", "--root", "1"}} {
+		if _, e := run(h, args...); ExitCode(e) != 2 {
+			t.Fatal(args, e)
+		}
+	}
+
+	var got string
+	c = New(Options{Version: "test", Home: func() (string, error) { return h, nil }, RunTUI: func(_ context.Context, _ engine.Service, _ string, root string) error {
+		got = root
+		return nil
+	}})
+	for _, args := range [][]string{{"--root", "  Blog "}, {"--tui", "--root", "Blog"}} {
+		got = ""
+		c.SetArgs(args)
+		if e := c.ExecuteContext(context.Background()); e != nil || got != "Blog" {
+			t.Fatal(args, got, e)
+		}
+	}
+
+	// help and version still avoid configuration and data.
+	if err := os.MkdirAll(filepath.Join(h, ".tque"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.WriteFile(filepath.Join(h, ".tque", "config.json"), []byte("broken"), 0600)
+	for _, args := range [][]string{{"--root", "x", "--help"}, {"ls", "--root", "x", "--help"}} {
+		if out, e := run(h, args...); e != nil || out == "" {
+			t.Fatal(args, e)
+		}
+	}
+}
+
 func TestUnknownCommandsUseUsageExitCode(t *testing.T) {
 	for _, args := range [][]string{{"lss"}, {"--tui", "extra"}} {
 		if _, err := run(t.TempDir(), args...); ExitCode(err) != 2 {

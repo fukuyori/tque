@@ -20,7 +20,8 @@ type Options struct {
 	Version string
 	Home    func() (string, error)
 	Now     func() time.Time
-	RunTUI  func(context.Context, engine.Service, string) error
+	// RunTUI receives the normalized --root value, or "" for all tasks.
+	RunTUI func(ctx context.Context, s engine.Service, dataDir, root string) error
 }
 type usageError struct{ error }
 
@@ -57,6 +58,18 @@ func New(o Options) *cobra.Command {
 		return nil
 	}
 	root.SetFlagErrorFunc(func(_ *cobra.Command, e error) error { return usage("%v", e) })
+	root.Flags().String("root", "", "起点タスクのIDまたはタイトル（その子孫だけを表示）")
+	rootValue := func(c *cobra.Command) (string, error) {
+		if !c.Flags().Changed("root") {
+			return "", nil
+		}
+		raw, _ := c.Flags().GetString("root")
+		v, e := engine.RootValue(raw)
+		if e != nil {
+			return "", usage("%v", e)
+		}
+		return v, nil
+	}
 	service := func() (engine.Service, string, error) {
 		home, e := o.Home()
 		if e != nil {
@@ -72,6 +85,10 @@ func New(o Options) *cobra.Command {
 		if len(args) > 0 {
 			return usage("unknown command %q", args[0])
 		}
+		rv, e := rootValue(c)
+		if e != nil {
+			return e
+		}
 		if o.RunTUI == nil {
 			return model.Err("InvalidInput", "TUI runner is unavailable")
 		}
@@ -79,7 +96,7 @@ func New(o Options) *cobra.Command {
 		if e != nil {
 			return e
 		}
-		return o.RunTUI(c.Context(), s, path)
+		return o.RunTUI(c.Context(), s, path, rv)
 	}
 	root.PersistentPreRunE = func(c *cobra.Command, _ []string) error {
 		if forceTUI && c != root {
@@ -170,6 +187,7 @@ func New(o Options) *cobra.Command {
 		list.Flags().Bool(f, false, f)
 	}
 	list.Flags().String("search", "", "タイトルの部分一致検索")
+	list.Flags().String("root", "", "起点タスクのIDまたはタイトル（その子孫だけを表示）")
 	list.Flags().String("sort", "id", "id、due または name")
 	_ = list.RegisterFlagCompletionFunc("sort", fixed("id", "due", "name"))
 	list.RunE = func(c *cobra.Command, _ []string) error {
@@ -185,6 +203,10 @@ func New(o Options) *cobra.Command {
 		if q.Sort != "id" && q.Sort != "due" && q.Sort != "name" {
 			return usage("--sort must be id, due or name")
 		}
+		rv, e := rootValue(c)
+		if e != nil {
+			return e
+		}
 		s, _, e := service()
 		if e != nil {
 			return e
@@ -192,6 +214,17 @@ func New(o Options) *cobra.Command {
 		d, e := s.Repo.Read(c.Context())
 		if e != nil {
 			return e
+		}
+		if rv != "" {
+			candidates := engine.RootCandidates(d, rv)
+			switch len(candidates) {
+			case 0:
+				return model.Err("NotFound", "no task matches --root %q", rv)
+			case 1:
+				q.Root = candidates[0].ID
+			default:
+				return model.Err("InvalidInput", "--root %q matches %d tasks; specify an ID: %s", rv, len(candidates), engine.FormatRootCandidates(d, candidates))
+			}
 		}
 		rows, _ := engine.Select(d, q)
 		if b("json") {

@@ -341,6 +341,174 @@ func TestStartupCollapsesAllParents(t *testing.T) {
 	}
 }
 
+// rootModel stores:
+// 1 Blog
+// └─ 2 Design
+//
+//	├─ 3 Draft
+//	│  └─ 4 Outline
+//	└─ 5 Review
+//
+// 6 Work
+// └─ 7 design
+func rootModel(t *testing.T) *Model {
+	t.Helper()
+	s := engine.Service{Repo: &storage.Store{Dir: t.TempDir()}, Now: func() time.Time { return time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC) }}
+	var d model.Document
+	for _, item := range []struct {
+		title  string
+		parent int64
+	}{{"Blog", 0}, {"Design", 1}, {"Draft", 2}, {"Outline", 3}, {"Review", 2}, {"Work", 0}, {"design", 6}} {
+		r := engine.Request{Op: "add", Patch: engine.Patch{Title: &item.title}}
+		if item.parent != 0 {
+			p := item.parent
+			r.Patch.ParentSet, r.Patch.Parent = true, &p
+		}
+		res, e := s.Execute(context.Background(), nil, r)
+		if e != nil {
+			t.Fatal(e)
+		}
+		d = res.Document
+	}
+	m := New(s, "D:/data", d)
+	m.noColor = true
+	return m
+}
+func rowIDs(m *Model) []int64 {
+	out := []int64{}
+	for _, r := range m.rows {
+		out = append(out, r.ID)
+	}
+	return out
+}
+
+func TestRootFocus(t *testing.T) {
+	m := rootModel(t)
+	if e := m.chooseRoot(" design "); e != nil || m.mode != "pick" || len(m.pick) != 2 {
+		t.Fatal("ambiguous title should open the picker", e, m.mode, m.pick)
+	}
+	view := m.View().Content
+	for _, want := range []string{`起点を選択: "design"  2件`, "> #2 [ ] Blog > Design", "#7 [ ] Work > design", "Esc:全体表示で開く"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("missing %q\n%s", want, view)
+		}
+	}
+	press(m, "down")
+	press(m, "up")
+	press(m, "enter")
+	if m.mode != "list" || m.rootID != 2 || m.selected != 2 {
+		t.Fatal(m.mode, m.rootID, m.selected)
+	}
+	// The root is expanded; its descendants keep the startup collapse.
+	if got := rowIDs(m); len(got) != 3 || got[0] != 2 || got[1] != 3 || got[2] != 5 || m.rows[0].Depth != 0 {
+		t.Fatal("root view", got)
+	}
+	lines := strings.Split(m.View().Content, "\n")
+	if !strings.HasPrefix(lines[0], "tque  起点: Blog > Design (#2)  保存先: D:/data") || strings.Contains(m.View().Content, "Blog  ") {
+		t.Fatal(lines[0])
+	}
+	press(m, "left") // collapse the root
+	press(m, "left") // must not move above the root
+	if m.selected != 2 || len(m.rows) != 1 {
+		t.Fatal("left escaped the root", m.selected, rowIDs(m))
+	}
+	press(m, "right")
+
+	press(m, "a")
+	if m.mode != "child" || m.draftID != 2 || !strings.Contains(strings.Join(m.summary(), "\n"), "#2 の子を追加（起点）") {
+		t.Fatal(m.mode, m.draftID, m.summary())
+	}
+	m.input.set("Publish")
+	m.Update(press(m, "enter")())
+	added := m.views[m.selected]
+	if added.Title != "Publish" || added.ParentID == nil || *added.ParentID != 2 {
+		t.Fatal("a must add a child of the root", added)
+	}
+
+	// Renumbering the root keeps the focus by internal identity.
+	if _, e := m.service.Execute(context.Background(), nil, engine.Request{Op: "renumber", ID: 2, NewID: 20}); e != nil {
+		t.Fatal(e)
+	}
+	m.Update(m.read()())
+	if m.rootID != 20 || m.rows[0].ID != 20 || !strings.Contains(m.titleLine(), "(#20)") {
+		t.Fatal(m.rootID, rowIDs(m), m.titleLine())
+	}
+	m.mode = "help"
+	if !strings.Contains(strings.Join(m.pageLines(), "\n"), "Blog > Design (#20)") {
+		t.Fatal("help should show the root path")
+	}
+	m.mode = "list"
+
+	// Deleting the root returns to the full tree with a notice.
+	if _, e := m.service.Execute(context.Background(), nil, engine.Request{Op: "rm", ID: 20, Cascade: true}); e != nil {
+		t.Fatal(e)
+	}
+	m.Update(m.read()())
+	if m.rootID != 0 || !strings.Contains(m.notice, "起点 #20 は削除されたため全体表示") || m.rows[0].ID != 1 {
+		t.Fatal(m.rootID, m.notice, rowIDs(m))
+	}
+	if strings.Contains(m.titleLine(), "起点") {
+		t.Fatal(m.titleLine())
+	}
+}
+
+func TestRootChoiceOutcomes(t *testing.T) {
+	m := rootModel(t)
+	if e := m.chooseRoot("missing"); e == nil || !strings.Contains(e.Error(), "NotFound") {
+		t.Fatal(e)
+	}
+	if e := m.chooseRoot("  "); e == nil {
+		t.Fatal("empty root accepted")
+	}
+	if e := m.chooseRoot("3"); e != nil || m.mode != "list" || m.rootID != 3 || len(m.rows) != 2 {
+		t.Fatal("single match opens directly", e, m.mode, rowIDs(m))
+	}
+
+	m = rootModel(t)
+	_ = m.chooseRoot("design")
+	press(m, "esc")
+	if m.mode != "list" || m.rootID != 0 || rowIDs(m)[0] != 1 {
+		t.Fatal("Esc should open the full tree", m.mode, m.rootID)
+	}
+	m = rootModel(t)
+	_ = m.chooseRoot("design")
+	if press(m, "r") != nil || m.mode != "pick" {
+		t.Fatal("picker must not reload")
+	}
+	if press(m, "q") == nil {
+		t.Fatal("q should quit from the picker")
+	}
+	for _, size := range [][2]int{{40, 10}, {80, 24}} {
+		m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
+		lines := strings.Split(m.View().Content, "\n")
+		if len(lines) > size[1] {
+			t.Fatal("picker height", size, len(lines))
+		}
+		for _, line := range lines {
+			if ansi.StringWidth(line) > size[0] {
+				t.Fatal("picker width", size, line)
+			}
+		}
+	}
+}
+
+func TestRootTitleLineKeepsRootVisible(t *testing.T) {
+	m := rootModel(t)
+	title := "Outline"
+	_ = m.chooseRoot("4")
+	for _, width := range []int{40, 50, 60, 120} {
+		m.width = width
+		line := m.titleLine()
+		if ansi.StringWidth(line) > width || !strings.Contains(line, title) || !strings.Contains(line, "(#4)") {
+			t.Fatalf("width %d: %q", width, line)
+		}
+	}
+	m.width = 40
+	if line := m.titleLine(); strings.Contains(line, "保存先") || !strings.Contains(line, "..") {
+		t.Fatalf("narrow header should drop storage and ancestors first: %q", line)
+	}
+}
+
 func TestTaskRowColors(t *testing.T) {
 	m := testModel(t)
 	m.noColor = false

@@ -102,6 +102,8 @@ Run `tque` without arguments, or use `tque --tui`, in an interactive terminal.
 
 Enter saves an attribute; Esc cancels. Empty date or dependency input clears it. In search input, Enter keeps the query and Esc restores the previous query. Esc in the task list clears only the search, keeping the filter.
 
+To manage several projects, put each project's tasks under a top-level task and start with `tque --root NAME_OR_ID` to show only that task and its descendants. Any task can be the root. If several titles match, the TUI asks which one to open. `tque ls --root NAME_OR_ID` limits a listing the same way.
+
 The TUI starts with every parent collapsed, showing only top-level tasks. Expanding a parent shows its immediate children; deeper parents stay collapsed. Reloading with `r` keeps your expanded/collapsed state.
 
 Filtered trees retain ancestors as `[context]`; they are excluded from the match count. `!dep` means an incomplete dependency; `!` after a due date marks an overdue incomplete task.

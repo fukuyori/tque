@@ -18,6 +18,8 @@ type View struct {
 type Query struct {
 	All, Blocked, DueToday, Overdue, Ready, Tree bool
 	Search, Sort, Today                          string
+	// Root limits the result to that task and its descendants; 0 means all tasks.
+	Root int64
 }
 
 func Views(d model.Document) map[int64]View {
@@ -72,7 +74,14 @@ func Select(d model.Document, q Query) ([]View, int) {
 	views := Views(d)
 	matched := map[int64]bool{}
 	included := map[int64]bool{}
+	var scope map[int64]bool
+	if q.Root != 0 {
+		scope = subtree(d, q.Root)
+	}
 	for id, v := range views {
+		if scope != nil && !scope[id] {
+			continue
+		}
 		if !q.All && v.Status != "todo" || q.Blocked && !v.Blocked {
 			continue
 		}
@@ -92,12 +101,15 @@ func Select(d model.Document, q Query) ([]View, int) {
 		included[id] = true
 	}
 	if q.Tree {
+		// Context ancestors stop at the root so tasks above it stay hidden.
 		for id := range matched {
-			for p := views[id].ParentID; p != nil; p = views[*p].ParentID {
-				if included[*p] {
+			for cur := id; cur != q.Root; {
+				p := views[cur].ParentID
+				if p == nil || included[*p] {
 					break
 				}
 				included[*p] = true
+				cur = *p
 			}
 		}
 	}
@@ -130,22 +142,26 @@ func Select(d model.Document, q Query) ([]View, int) {
 		slices.SortFunc(out, less)
 		return out, len(matched)
 	}
+	// A row whose parent is not included starts a tree at depth 0. Without a
+	// root these are top-level tasks; with a root it is the root itself.
 	children := map[int64][]View{}
+	roots := []View{}
 	for id := range included {
 		v := views[id]
 		v.Context = !matched[id]
-		p := int64(0)
-		if v.ParentID != nil {
-			p = *v.ParentID
+		if v.ParentID != nil && included[*v.ParentID] {
+			children[*v.ParentID] = append(children[*v.ParentID], v)
+		} else {
+			roots = append(roots, v)
 		}
-		children[p] = append(children[p], v)
 	}
 	for p := range children {
 		slices.SortFunc(children[p], less)
 	}
+	slices.SortFunc(roots, less)
 	stack := []View{}
-	for i := len(children[0]) - 1; i >= 0; i-- {
-		stack = append(stack, children[0][i])
+	for i := len(roots) - 1; i >= 0; i-- {
+		stack = append(stack, roots[i])
 	}
 	for len(stack) > 0 {
 		v := stack[len(stack)-1]

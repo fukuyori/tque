@@ -37,6 +37,14 @@ type Model struct {
 	notice                         string
 	page                           int
 	noColor                        bool
+	// The --root task is tracked by internal identity so renumbering keeps it.
+	// rootID is its current display ID; 0 shows every task.
+	rootKey   string
+	rootID    int64
+	rootLost  string
+	pick      []int64
+	pickIndex int
+	pickValue string
 }
 type resultMsg struct {
 	result    engine.Result
@@ -50,7 +58,7 @@ type readMsg struct {
 }
 type dayMsg time.Time
 
-func Run(ctx context.Context, s engine.Service, dir string) error {
+func Run(ctx context.Context, s engine.Service, dir, root string) error {
 	if !term.IsTerminal(os.Stdin.Fd()) || !term.IsTerminal(os.Stdout.Fd()) {
 		return model.Err("InvalidInput", "TUI requires an interactive terminal")
 	}
@@ -60,8 +68,48 @@ func Run(ctx context.Context, s engine.Service, dir string) error {
 	}
 	m := New(s, dir, d)
 	m.ctx = ctx
+	if root != "" {
+		if e := m.chooseRoot(root); e != nil {
+			return e
+		}
+	}
 	_, e = tea.NewProgram(m, tea.WithContext(ctx)).Run()
 	return e
+}
+
+// chooseRoot resolves --root. Several matches open the root picker instead.
+func (m *Model) chooseRoot(raw string) error {
+	value, e := engine.RootValue(raw)
+	if e != nil {
+		return e
+	}
+	candidates := engine.RootCandidates(m.doc, value)
+	switch len(candidates) {
+	case 0:
+		return model.Err("NotFound", "no task matches --root %q", value)
+	case 1:
+		m.setRoot(candidates[0])
+	default:
+		m.mode = "pick"
+		m.pickValue = value
+		m.pickIndex = 0
+		m.pick = nil
+		for _, t := range candidates {
+			m.pick = append(m.pick, t.ID)
+		}
+	}
+	return nil
+}
+
+// setRoot opens the root expanded; its descendants keep the startup collapse.
+func (m *Model) setRoot(t model.Task) {
+	m.rootKey = t.InternalID
+	m.rootID = t.ID
+	delete(m.collapsed, t.ID)
+	m.selected = t.ID
+	m.offset = 0
+	m.mode = "list"
+	m.refresh()
 }
 func New(s engine.Service, dir string, d model.Document) *Model {
 	m := &Model{service: s, ctx: context.Background(), dir: dir, doc: d, width: 80, height: 24, collapsed: map[int64]bool{}, sort: "id", mode: "list", noColor: os.Getenv("NO_COLOR") != ""}
@@ -85,7 +133,8 @@ func tick() tea.Cmd             { return tea.Tick(time.Second, func(t time.Time)
 func (m *Model) Init() tea.Cmd  { return tick() }
 func (m *Model) filtered() bool { return m.search != "" || m.filter != 0 }
 func (m *Model) refresh() {
-	q := engine.Query{All: m.filter == 0, Tree: true, Search: m.search, Sort: m.sort, Today: m.today, DueToday: m.filter == 2, Overdue: m.filter == 3, Ready: m.filter == 4}
+	m.syncRoot()
+	q := engine.Query{All: m.filter == 0, Tree: true, Search: m.search, Sort: m.sort, Today: m.today, DueToday: m.filter == 2, Overdue: m.filter == 3, Ready: m.filter == 4, Root: m.rootID}
 	all, n := engine.Select(m.doc, q)
 	m.matched = n
 	m.views = engine.Views(m.doc)
@@ -121,6 +170,33 @@ func (m *Model) refresh() {
 		}
 	}
 	m.ensureVisible()
+}
+
+// syncRoot follows the root through renumbering and falls back to all tasks
+// when it was deleted. The notice is appended after the current message.
+func (m *Model) syncRoot() {
+	if m.rootID == 0 {
+		return
+	}
+	for _, t := range m.doc.Tasks {
+		if m.rootKey != "" && t.InternalID == m.rootKey || m.rootKey == "" && t.ID == m.rootID {
+			m.rootID = t.ID
+			return
+		}
+	}
+	m.rootLost = fmt.Sprintf("起点 #%d は削除されたため全体表示に切り替えました", m.rootID)
+	m.rootKey, m.rootID = "", 0
+}
+func (m *Model) flushRootNotice() {
+	if m.rootLost == "" {
+		return
+	}
+	if m.notice == "" {
+		m.notice = m.rootLost
+	} else {
+		m.notice += " / " + m.rootLost
+	}
+	m.rootLost = ""
 }
 func (m *Model) index() int {
 	for i, r := range m.rows {
@@ -243,6 +319,7 @@ func (m *Model) read() tea.Cmd {
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	defer m.flushRootNotice()
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -378,6 +455,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if m.mode == "pick" {
+			switch k {
+			case "up", "k":
+				m.pickIndex = max(0, m.pickIndex-1)
+			case "down", "j":
+				m.pickIndex = min(len(m.pick)-1, m.pickIndex+1)
+			case "pgup":
+				m.pickIndex = max(0, m.pickIndex-m.pickHeight())
+			case "pgdown":
+				m.pickIndex = min(len(m.pick)-1, m.pickIndex+m.pickHeight())
+			case "enter":
+				for _, t := range m.doc.Tasks {
+					if t.ID == m.pick[m.pickIndex] {
+						m.setRoot(t)
+						break
+					}
+				}
+			case "esc":
+				m.mode = "list"
+			case "q":
+				return m, tea.Quit
+			}
+			return m, nil
+		}
 		if m.mode == "help" || m.mode == "detail" {
 			if k == "esc" || m.mode == "help" && k == "?" {
 				if m.mode == "help" {
@@ -508,7 +609,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.refresh()
 		case "a":
-			m.begin("add", "")
+			if m.rootID != 0 {
+				// Under --root a new top-level task would be hidden at once.
+				m.begin("child", "")
+				m.draftID = m.rootID
+			} else {
+				m.begin("add", "")
+			}
 		default:
 			v, ok := m.views[m.selected]
 			if !ok {
@@ -523,7 +630,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !m.filtered() && !m.collapsed[v.ID] && len(m.children[v.ID]) > 0 {
 					m.collapsed[v.ID] = true
 					m.refresh()
-				} else if v.ParentID != nil {
+				} else if v.ParentID != nil && v.ID != m.rootID {
 					m.selected = *v.ParentID
 					m.ensureVisible()
 				}
@@ -667,6 +774,9 @@ func (m *Model) acceptDocument(next model.Document) bool {
 	}
 	m.selected = translate(m.selected)
 	m.draftID = translate(m.draftID)
+	if m.rootKey == "" && m.rootID != 0 {
+		m.rootID = translate(m.rootID)
+	}
 	collapsed := map[int64]bool{}
 	for id, value := range m.collapsed {
 		if newID := translate(id); newID != 0 {

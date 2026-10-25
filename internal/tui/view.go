@@ -77,7 +77,9 @@ func (m *Model) View() tea.View {
 		v.AltScreen = true
 		return v
 	}
-	if m.mode == "detail" || m.mode == "help" {
+	if m.mode == "pick" {
+		lines = m.pickLines()
+	} else if m.mode == "detail" || m.mode == "help" {
 		content := m.pageLines()
 		m.page = min(m.page, m.maxPage())
 		title := "全文詳細（読み取り専用）"
@@ -96,7 +98,7 @@ func (m *Model) View() tea.View {
 		lines = append(lines, fmt.Sprintf("↑↓:スクロール  Esc:戻る  %d/%d", m.page+1, max(1, len(content))))
 	} else {
 		filters := []string{"全件", "未完了", "今日まで", "期限超過", "着手可能"}
-		lines = append(lines, "tque  保存先: "+safe(m.dir), fmt.Sprintf("表示:%s  並び:%s  一致:%d件  検索:%s", filters[m.filter], m.sort, m.matched, safe(m.search)), strings.Repeat("-", m.width), m.listHeader())
+		lines = append(lines, m.titleLine(), fmt.Sprintf("表示:%s  並び:%s  一致:%d件  検索:%s", filters[m.filter], m.sort, m.matched, safe(m.search)), strings.Repeat("-", m.width), m.listHeader())
 		count := m.listHeight()
 		slots := m.listSlots()
 		for i := 0; i < count; i++ {
@@ -145,6 +147,81 @@ func (m *Model) View() tea.View {
 	v := tea.NewView(strings.Join(lines, "\n"))
 	v.AltScreen = true
 	return v
+}
+
+// shortenPath keeps the last segment and drops leading ancestors first.
+func shortenPath(segs []string, w int) string {
+	if len(segs) == 0 {
+		return ""
+	}
+	if s := strings.Join(segs, " > "); ansi.StringWidth(s) <= w {
+		return s
+	}
+	for i := 1; i < len(segs); i++ {
+		if s := ".. > " + strings.Join(segs[i:], " > "); ansi.StringWidth(s) <= w {
+			return s
+		}
+	}
+	return fit(segs[len(segs)-1], w)
+}
+func (m *Model) rootPath(id int64) []string {
+	segs := engine.TaskPath(m.doc, id)
+	for i := range segs {
+		segs[i] = safe(segs[i])
+	}
+	return segs
+}
+
+// titleLine drops the data path before shortening the root's ancestors, so
+// the root title and ID stay visible.
+func (m *Model) titleLine() string {
+	storage := "保存先: " + safe(m.dir)
+	if m.rootID == 0 {
+		return "tque  " + storage
+	}
+	head, tail := "tque  起点: ", fmt.Sprintf(" (#%d)", m.rootID)
+	segs := m.rootPath(m.rootID)
+	base := head + strings.Join(segs, " > ") + tail
+	if room := m.width - ansi.StringWidth(base) - 2; room >= 3 {
+		return base + "  " + fit(storage, room)
+	} else if room >= -2 {
+		return base
+	}
+	return head + shortenPath(segs, max(1, m.width-ansi.StringWidth(head+tail))) + tail
+}
+func (m *Model) pickHeight() int { return max(1, m.height-2) }
+func (m *Model) pickLines() []string {
+	lines := []string{fmt.Sprintf("起点を選択: %q  %d件", safe(m.pickValue), len(m.pick))}
+	views := engine.Views(m.doc)
+	idWidth := 0
+	for _, id := range m.pick {
+		idWidth = max(idWidth, len(fmt.Sprintf("#%d", id)))
+	}
+	count := m.pickHeight()
+	start := max(0, m.pickIndex-count+1)
+	for i := start; i < start+count; i++ {
+		if i >= len(m.pick) {
+			lines = append(lines, "")
+			continue
+		}
+		v := views[m.pick[i]]
+		mark, check := " ", "[ ]"
+		if i == m.pickIndex {
+			mark = ">"
+		}
+		if v.Status == "done" {
+			check = "[x]"
+		}
+		left := fmt.Sprintf("%s %*s %s ", mark, idWidth, fmt.Sprintf("#%d", v.ID), check)
+		right := fmt.Sprintf(" %3d%%", v.EffectiveProgress)
+		avail := max(1, m.width-ansi.StringWidth(left+right))
+		line := fit(left+pad(shortenPath(m.rootPath(v.ID), avail), avail)+right, m.width)
+		if !m.noColor && i == m.pickIndex {
+			line = lipgloss.NewStyle().Reverse(true).Render(line)
+		}
+		lines = append(lines, line)
+	}
+	return append(lines, "↑↓:選択  Enter:開く  Esc:全体表示で開く  q:終了")
 }
 
 func (m *Model) row(v engine.View) string {
@@ -262,6 +339,9 @@ func (m *Model) summary() []string {
 		if m.mode != "add" && m.mode != "search" && m.mode != "child" {
 			label = fmt.Sprintf("%s (#%d)", label, m.draftID)
 		}
+		if m.mode == "child" && m.rootID != 0 && m.draftID == m.rootID {
+			label += "（起点）"
+		}
 		return []string{label, line, hint, latest}
 	}
 	if m.mode == "delete" {
@@ -324,7 +404,11 @@ func (m *Model) footer() string {
 func (m *Model) pageLines() []string {
 	var s string
 	if m.mode == "help" {
-		s = "移動\n上下/j/k:選択  左右:折り畳み・親子移動\nJ/K:選択位置固定で下/上へスクロール（空行は飛ばす）\nEnter:全文詳細  Esc:戻る\n\n追加・編集\na:親なしで追加  A:子として追加\ni:番号変更 e:タイトル s:開始日 d:期日 p:進捗 l:依存先\nSpace:完了/未完了  +/-:進捗±10（手動固定）\nx/Delete:削除確認 y:削除 n/Esc/Enter:取消\n\n検索・表示\n/:タイトル検索 Enter:条件保持 Esc:開始前へ\n入力中は左右:文字移動、Space・j/k・?:入力文字\n検索適用後は左右:表示上の親子移動\nf:全件→未完了→今日まで→期限超過→着手可能\no:ID順/期日順/名前順 r:データ再読込\n一覧のEscは検索だけ解除（表示条件は維持）\n[manual]:手動固定 [context]:文脈用祖先 !dep:依存待ち\n期日の!:未完了で期限超過\n\n終了\nq/Ctrl+C:終了。入力中のqは文字\n保存中のCtrl+C:成功後に終了、失敗時は画面に戻る\n\n保存先\n" + safe(m.dir) + "\n\n最新の通知\n" + safe(m.notice)
+		s = "移動\n上下/j/k:選択  左右:折り畳み・親子移動\nJ/K:選択位置固定で下/上へスクロール（空行は飛ばす）\nEnter:全文詳細  Esc:戻る\n\n追加・編集\na:親なしで追加  A:子として追加\ni:番号変更 e:タイトル s:開始日 d:期日 p:進捗 l:依存先\nSpace:完了/未完了  +/-:進捗±10（手動固定）\nx/Delete:削除確認 y:削除 n/Esc/Enter:取消\n\n検索・表示\n/:タイトル検索 Enter:条件保持 Esc:開始前へ\n入力中は左右:文字移動、Space・j/k・?:入力文字\n検索適用後は左右:表示上の親子移動\nf:全件→未完了→今日まで→期限超過→着手可能\no:ID順/期日順/名前順 r:データ再読込\n一覧のEscは検索だけ解除（表示条件は維持）\n[manual]:手動固定 [context]:文脈用祖先 !dep:依存待ち\n期日の!:未完了で期限超過\n\n終了\nq/Ctrl+C:終了。入力中のqは文字\n保存中のCtrl+C:成功後に終了、失敗時は画面に戻る\n\n"
+		if m.rootID != 0 {
+			s += fmt.Sprintf("起点\n%s (#%d)\n--root指定中は起点と子孫だけを表示。aは起点の子として追加\n\n", strings.Join(m.rootPath(m.rootID), " > "), m.rootID)
+		}
+		s += "保存先\n" + safe(m.dir) + "\n\n最新の通知\n" + safe(m.notice)
 	} else {
 		v, ok := m.views[m.selected]
 		if !ok {

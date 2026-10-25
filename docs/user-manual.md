@@ -222,6 +222,21 @@ At startup, every task with children is collapsed and only top-level tasks are s
 
 “Due through today” includes incomplete tasks due today or earlier. “Overdue” includes incomplete tasks due before today. “Ready” means incomplete, with no incomplete dependencies, and with a start date that is absent or no later than today.
 
+### Showing one project (`--root`)
+
+To manage several projects, create one top-level task per project and add the project's tasks beneath it. Start the TUI with `--root` to show only one task and its descendants:
+
+```text
+tque --root Blog
+tque --root 12
+```
+
+- The value is a task ID or a title. Titles must match exactly, ignoring case and surrounding spaces; partial matches are not used. A numeric value matches both the task with that ID and tasks with that title. Completed tasks can be chosen.
+- Any task can be the root, not only a top-level one. The root appears at the top of the list at depth 0, followed by its descendants; ancestors above it are not shown. The header shows the path from the top-level task to the root and its ID.
+- If several tasks match, a selection screen lists each candidate with its ID, status, path, and progress. Enter opens the selected task, Esc opens the whole tree, and `q` quits. If nothing matches, the TUI does not start.
+- `a` adds a child of the root. Left on the root collapses it but does not move above it. The root follows renumbering. If the root is deleted, the TUI returns to the whole tree and says so.
+- Search, filters, and sorting apply within the root. The root cannot be changed inside the TUI; restart with another value.
+
 ### Concurrent use
 
 Press `r` to load changes made through another instance or the CLI. There is no automatic file watcher. `r` reloads tasks, not configuration.
@@ -315,9 +330,11 @@ N must be between 0 and 36500. Dates do not include a time. If both dates exist,
 | --sort id | ID order; default |
 | --sort due | Due-date order; undated last, ID breaks ties |
 | --json | Output a JSON array |
+| --root VALUE | Only that task and its descendants. VALUE is an ID or exact title; if several tasks match, the command fails and lists them with their IDs |
 
 ```text
 tque ls --all --tree
+tque ls --all --tree --root Blog
 tque ls --search "document" --sort due
 tque ls --due-today
 tque ls --ready --json
