@@ -2,7 +2,7 @@
 
 [English](user-manual.md) | [日本語](user-manual.ja.md)
 
-Applies to tque 0.2.4.
+Applies to tque 0.3.0.
 
 tque is a terminal task manager. Use commands through its CLI or operate a task list with the keyboard through its TUI. Both interfaces use the same saved data. This manual is in English; it does not change the language of messages displayed by the application.
 
@@ -35,7 +35,7 @@ After extracting a ZIP, open a terminal in the directory containing the executab
 ./tque
 ```
 
-If a Unix extraction tool did not preserve execute permission, set it with `chmod +x ./tque` before running. The ZIPs are unsigned; actual macOS execution and signing/notarization remain unverified.
+If a Unix extraction tool did not preserve execute permission, set it with `chmod +x ./tque` before running. The ZIPs are unsigned.
 
 The examples in this manual assume the executable is named `tque` and available on PATH. Otherwise, replace the first `tque` with its actual path, such as `.\tque.exe` in PowerShell or `./tque` on Unix.
 

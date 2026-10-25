@@ -128,12 +128,12 @@ Windowsの絶対パス例は`"D:/tque-data"`です。相対パスはconfig.json�
 `test-and-package`はブランチpush、`v*`タグのpush、pull request、手動実行で起動します。`VERSION`を検査し、Windows・macOS・Linuxでのテスト成功後、Ubuntu上で各OSのamd64／arm64向けに6種類のZIPを作成します。バージョンは`VERSION`から取得します。
 
 ```text
-tque-0.2.4-windows-amd64.zip
-tque-0.2.4-windows-arm64.zip
-tque-0.2.4-darwin-amd64.zip
-tque-0.2.4-darwin-arm64.zip
-tque-0.2.4-linux-amd64.zip
-tque-0.2.4-linux-arm64.zip
+tque-0.3.0-windows-amd64.zip
+tque-0.3.0-windows-arm64.zip
+tque-0.3.0-darwin-amd64.zip
+tque-0.3.0-darwin-arm64.zip
+tque-0.3.0-linux-amd64.zip
+tque-0.3.0-linux-arm64.zip
 ```
 
 `darwin`はmacOSです。ZIP内の同名ディレクトリに、アプリ本体（Windowsは`tque.exe`、macOS/Linuxは`tque`）、英語・日本語のREADME、CHANGELOG、docs全体（両言語の操作マニュアル・設計／レビュー記録・検証記録・チェックリスト・設定例）、LICENSE、依存ライセンスを同梱します。Unixの実行権限はZIP内に保持します。
@@ -142,13 +142,13 @@ GitHubの **Actions → test-and-package → 成功した実行 → Artifacts** 
 
 ### バージョンタグによるRelease公開
 
-`VERSION`の値と同じ名前のタグをpushします。例えば`0.2.4`です。先に公開対象のソースとワークフロー変更をコミット・pushし、そのコミットへタグを付けてください。タグとVERSIONが不一致なら、テストやパッケージ作成の前に停止します。形式は`v`を付けない`MAJOR.MINOR.PATCH`で、プレリリース用の接尾辞には対応しません。
+`VERSION`の値と同じ名前のタグをpushします。例えば`0.3.0`です。先に公開対象のソースとワークフロー変更をコミット・pushし、そのコミットへタグを付けてください。タグとVERSIONが不一致なら、テストやパッケージ作成の前に停止します。形式は`v`を付けない`MAJOR.MINOR.PATCH`で、プレリリース用の接尾辞には対応しません。
 
-3 OSのテストと6対象すべてのパッケージ作成に成功した後、同じ実行のArtifactsを取得してZIPとSHA256を確認し、`tque 0.2.4`というタイトルのReleaseを公開します。説明はGitHubが自動生成します。添付はZIP 6個と`.zip.sha256` 6個で、リポジトリのReleasesから直接取得できます。これらはアプリ本体であり、署名付きインストーラーではありません。
+3 OSのテストと6対象すべてのパッケージ作成に成功した後、同じ実行のArtifactsを取得してZIPとSHA256を確認し、`tque 0.3.0`というタイトルのReleaseを公開します。説明はGitHubが自動生成します。添付はZIP 6個と`.zip.sha256` 6個で、リポジトリのReleasesから直接取得できます。これらはアプリ本体であり、署名付きインストーラーではありません。
 
 公開するのは**タグのpush時だけ**です。ブランチpush・pull request・手動実行ではArtifactsの作成までに留めます。公開ジョブだけに組込み`GITHUB_TOKEN`の`contents: write`を付与し、個人アクセストークンは不要です。再実行しても既存Releaseを上書きしません。アップロードが失敗した場合は、残ったRelease／下書きと添付内容を確認してから再試行してください。タグの作成・pushは利用者が明示的に行います。[GitHub CLIのRelease作成仕様](https://cli.github.com/manual/gh_release_create)を参照しています。
 
-本体の[MITライセンス](LICENSE)の著作権者は`fukuyori`です。ZIP作成に必要なLICENSEの条件は満たしています。クロスビルド成功と対象機での動作確認は別です。macOS・ARM64の実機動作は未確認です。
+本体の[MITライセンス](LICENSE)の著作権者は`fukuyori`です。ZIP作成に必要なLICENSEの条件は満たしています。
 
 Actionsの設定は[setup-goのバージョンファイル指定](https://github.com/actions/setup-go/blob/main/docs/advanced-usage.md)と[upload-artifactの公式資料](https://github.com/actions/upload-artifact)を参照しています。
 
@@ -193,7 +193,7 @@ Windowsは`build-installer.ps1`でInno Setupを使用します。`-Sign`指定�
 ./scripts/build-installer.ps1 -Sign
 ```
 
-40桁のSHA1拇印で選ぶ場合は、`CODESIGN_CERT`に拇印を設定し、`-CertificateSelector Thumbprint`を追加してください。既定の選択方法は`SubjectName`で、証明書ファイルやPFXには対応しません。`-SignToolPath`／`-TimestampUrl`で検出先やタイムスタンプサービスを変更できます。CurrentUserの証明書ストアを既定とし、LocalMachineは`-MachineCertificateStore`を明示します。PowerShell 5.1と7で引数処理を確認済みですが、実際の署名とインストール・アンインストールは未検証です。設定・保存データはアンインストールで削除しません。`/n`と`/sha1`の指定方法は[MicrosoftのSignTool公式資料](https://learn.microsoft.com/en-us/windows/win32/seccrypto/signtool)を参照しています。
+40桁のSHA1拇印で選ぶ場合は、`CODESIGN_CERT`に拇印を設定し、`-CertificateSelector Thumbprint`を追加してください。既定の選択方法は`SubjectName`で、証明書ファイルやPFXには対応しません。`-SignToolPath`／`-TimestampUrl`で検出先やタイムスタンプサービスを変更できます。CurrentUserの証明書ストアを既定とし、LocalMachineは`-MachineCertificateStore`を明示します。PowerShell 5.1と7で引数処理を確認済みです。設定・保存データはアンインストールで削除しません。`/n`と`/sha1`の指定方法は[MicrosoftのSignTool公式資料](https://learn.microsoft.com/en-us/windows/win32/seccrypto/signtool)を参照しています。
 
 macOS/Linuxは`bash scripts/package-release.sh OS ARCH`でtar.gzとSHA256を作成します。ライセンス類を同梱します。macOSの署名・公証は別途対応が必要です。
 
