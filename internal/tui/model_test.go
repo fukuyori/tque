@@ -509,6 +509,93 @@ func TestRootTitleLineKeepsRootVisible(t *testing.T) {
 	}
 }
 
+func TestExternalChangesRefreshTUI(t *testing.T) {
+	dir := t.TempDir()
+	s := engine.Service{Repo: &storage.Store{Dir: dir}, Now: func() time.Time { return time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC) }}
+	exec := func(r engine.Request) {
+		t.Helper()
+		if _, e := s.Execute(context.Background(), nil, r); e != nil {
+			t.Fatal(e)
+		}
+	}
+	add := func(title string) { exec(engine.Request{Op: "add", Patch: engine.Patch{Title: &title}}) }
+	add("first")
+	d, e := s.Repo.Read(context.Background())
+	if e != nil {
+		t.Fatal(e)
+	}
+	m := New(s, dir, d)
+	m.noColor = true
+	if m.watch() != nil {
+		t.Fatal("unchanged file must not be read")
+	}
+
+	add("from CLI")
+	c := m.watch()
+	if c == nil {
+		t.Fatal("external change not detected")
+	}
+	m.Update(c())
+	if len(m.doc.Tasks) != 2 || m.notice != "外部の変更を反映しました" || m.selected != 1 {
+		t.Fatal(len(m.doc.Tasks), m.notice, m.selected)
+	}
+	if m.watch() != nil {
+		t.Fatal("same stamp read twice")
+	}
+
+	// Our own save changes the file but is not reported as external.
+	m.Update(press(m, "space")())
+	m.notice = "own"
+	if c := m.watch(); c != nil {
+		m.Update(c())
+	}
+	if m.notice != "own" {
+		t.Fatal(m.notice)
+	}
+
+	// While editing, the change waits until the list is shown again.
+	press(m, "e")
+	add("while editing")
+	m.Update(m.watch()())
+	if len(m.doc.Tasks) != 2 || m.pending == nil || m.notice != "外部で更新されました。一覧に戻ると反映します" {
+		t.Fatal(len(m.doc.Tasks), m.notice)
+	}
+	press(m, "esc")
+	if len(m.doc.Tasks) != 3 || m.pending != nil || m.notice != "外部の変更を反映しました" {
+		t.Fatal(len(m.doc.Tasks), m.notice)
+	}
+
+	// Saving and uncertain states are not refreshed automatically.
+	add("while saving")
+	m.busy = true
+	if m.watch() != nil {
+		t.Fatal("watched while saving")
+	}
+	m.busy, m.uncertain = false, true
+	if m.watch() != nil {
+		t.Fatal("watched while uncertain")
+	}
+	m.uncertain = false
+	m.Update(m.watch()())
+	if len(m.doc.Tasks) != 4 {
+		t.Fatal("change after saving was missed")
+	}
+
+	// Read errors keep the view and are reported once.
+	if e := os.WriteFile(filepath.Join(dir, "tasks.json"), []byte("{"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	m.Update(m.watch()())
+	if len(m.doc.Tasks) != 4 || !strings.HasPrefix(m.notice, "外部の変更を読み込めません") {
+		t.Fatal(m.notice)
+	}
+	m.notice = "other"
+	m.Update(m.watch()())
+	if m.notice != "other" || len(m.doc.Tasks) != 4 {
+		t.Fatal("repeated error notice", m.notice)
+	}
+}
+
 func TestTaskRowColors(t *testing.T) {
 	m := testModel(t)
 	m.noColor = false

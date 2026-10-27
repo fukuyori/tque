@@ -2,7 +2,7 @@
 
 [English](user-manual.md) | [日本語](user-manual.ja.md)
 
-Applies to tque 0.3.0.
+Applies to tque 0.3.1.
 
 tque is a terminal task manager. Use commands through its CLI or operate a task list with the keyboard through its TUI. Both interfaces use the same saved data. This manual is in English; it does not change the language of messages displayed by the application.
 
@@ -239,7 +239,7 @@ tque --root 12
 
 ### Concurrent use
 
-Press `r` to load changes made through another instance or the CLI. There is no automatic file watcher. `r` reloads tasks, not configuration.
+Changes made through the CLI or another TUI appear automatically. The TUI checks the data file every second. In the task list it applies changes at once and shows “外部の変更を反映しました” (external changes applied). While you are typing, confirming a deletion, or viewing details or help, it shows a notice and applies the changes when you return to the list. Changes are not applied automatically while saving or after an uncertain save result. Press `r` to reload immediately; `r` reloads tasks, not configuration.
 
 During a save, Ctrl+C requests exit after success; other keys, including `q`, are ignored. On failure, the application stays open and displays a notification.
 

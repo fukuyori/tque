@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/charmbracelet/x/term"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -45,6 +46,34 @@ type Model struct {
 	pick      []int64
 	pickIndex int
 	pickValue string
+	// External changes are detected from tasks.json's size and modification
+	// time; pending holds a newer document until the list is shown again.
+	stamp    fileStamp
+	watching bool
+	pending  *model.Document
+	watchErr string
+}
+type fileStamp struct {
+	mod  time.Time
+	size int64
+	ok   bool
+}
+
+func (a fileStamp) same(b fileStamp) bool {
+	return a.ok == b.ok && a.size == b.size && a.mod.Equal(b.mod)
+}
+func statStamp(dir string) fileStamp {
+	st, e := os.Stat(filepath.Join(dir, "tasks.json"))
+	if e != nil {
+		return fileStamp{}
+	}
+	return fileStamp{mod: st.ModTime(), size: st.Size(), ok: true}
+}
+
+type watchMsg struct {
+	doc   model.Document
+	err   error
+	stamp fileStamp
 }
 type resultMsg struct {
 	result    engine.Result
@@ -62,12 +91,15 @@ func Run(ctx context.Context, s engine.Service, dir, root string) error {
 	if !term.IsTerminal(os.Stdin.Fd()) || !term.IsTerminal(os.Stdout.Fd()) {
 		return model.Err("InvalidInput", "TUI requires an interactive terminal")
 	}
+	// Stamp before reading so a change during the read is still detected.
+	stamp := statStamp(dir)
 	d, e := s.Repo.Read(ctx)
 	if e != nil {
 		return e
 	}
 	m := New(s, dir, d)
 	m.ctx = ctx
+	m.stamp = stamp
 	if root != "" {
 		if e := m.chooseRoot(root); e != nil {
 			return e
@@ -114,6 +146,7 @@ func (m *Model) setRoot(t model.Task) {
 func New(s engine.Service, dir string, d model.Document) *Model {
 	m := &Model{service: s, ctx: context.Background(), dir: dir, doc: d, width: 80, height: 24, collapsed: map[int64]bool{}, sort: "id", mode: "list", noColor: os.Getenv("NO_COLOR") != ""}
 	m.today = m.now().Format(time.DateOnly)
+	m.stamp = statStamp(dir)
 	// Start with every parent collapsed; tasks that become parents later stay expanded.
 	for _, t := range d.Tasks {
 		if t.ParentID != nil {
@@ -318,9 +351,76 @@ func (m *Model) read() tea.Cmd {
 	return func() tea.Msg { d, e := m.service.Repo.Read(m.ctx); return readMsg{d, e} }
 }
 
+// watch checks tasks.json without the lock and reads it only after a change.
+// Unlike r it does not block keys. Saving and uncertain states are left to
+// the save result and the explicit reload.
+func (m *Model) watch() tea.Cmd {
+	if m.watching || m.busy || m.uncertain {
+		return nil
+	}
+	stamp := statStamp(m.dir)
+	if stamp.same(m.stamp) {
+		return nil
+	}
+	m.watching = true
+	s, ctx := m.service, m.ctx
+	return func() tea.Msg {
+		d, e := s.Repo.Read(ctx)
+		return watchMsg{doc: d, err: e, stamp: stamp}
+	}
+}
+func (m *Model) watched(msg watchMsg) {
+	m.watching = false
+	if msg.err != nil {
+		// Keep the current view and retry on the next tick, reporting once.
+		if text := msg.err.Error(); text != m.watchErr {
+			m.watchErr = text
+			m.notice = "外部の変更を読み込めません: " + text
+		}
+		return
+	}
+	m.watchErr = ""
+	if m.busy || m.uncertain {
+		return // Check again later; the stamp is left unchanged.
+	}
+	m.stamp = msg.stamp
+	if msg.doc.Revision <= m.doc.Revision {
+		return // Our own save, or nothing new.
+	}
+	if m.mode == "list" {
+		m.applyExternal(msg.doc)
+		return
+	}
+	if m.pending == nil {
+		m.notice = "外部で更新されました。一覧に戻ると反映します"
+	}
+	m.pending = &msg.doc
+}
+func (m *Model) applyExternal(d model.Document) {
+	m.pending = nil
+	m.acceptDocument(d)
+	m.refresh()
+	m.notice = "外部の変更を反映しました"
+}
+
+// afterUpdate applies a deferred external change once the list is shown.
+func (m *Model) afterUpdate() {
+	if p := m.pending; p != nil && m.mode == "list" && !m.busy && !m.uncertain {
+		if p.Revision > m.doc.Revision {
+			m.applyExternal(*p)
+		} else {
+			m.pending = nil
+		}
+	}
+	m.flushRootNotice()
+}
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	defer m.flushRootNotice()
+	defer m.afterUpdate()
 	switch msg := msg.(type) {
+	case watchMsg:
+		m.watched(msg)
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -332,7 +432,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.today = day
 			m.refresh()
 		}
-		return m, tick()
+		return m, tea.Batch(tick(), m.watch())
 	case readMsg:
 		m.busy = false
 		exitPending := m.exitPending
@@ -342,6 +442,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		wasUncertain := m.uncertain
+		m.pending = nil
 		m.acceptDocument(msg.doc)
 		m.uncertain = false
 		m.mode = "list"
