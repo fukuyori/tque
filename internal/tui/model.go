@@ -133,11 +133,23 @@ func (m *Model) chooseRoot(raw string) error {
 	return nil
 }
 
-// setRoot opens the root expanded; its descendants keep the startup collapse.
+// setRoot opens the root and all its descendants expanded; tasks outside the
+// root keep the startup collapse.
 func (m *Model) setRoot(t model.Task) {
 	m.rootKey = t.InternalID
 	m.rootID = t.ID
-	delete(m.collapsed, t.ID)
+	open := map[int64]bool{t.ID: true}
+	for changed := true; changed; {
+		changed = false
+		for _, c := range m.doc.Tasks {
+			if c.ParentID != nil && open[*c.ParentID] && !open[c.ID] {
+				open[c.ID], changed = true, true
+			}
+		}
+	}
+	for id := range open {
+		delete(m.collapsed, id)
+	}
 	m.selected = t.ID
 	m.offset = 0
 	m.mode = "list"

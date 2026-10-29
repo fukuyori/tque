@@ -2,7 +2,7 @@
 
 [English](user-manual.md) | [日本語](user-manual.ja.md)
 
-Applies to tque 0.3.1.
+Applies to tque 0.4.0.
 
 tque is a terminal task manager. Use commands through its CLI or operate a task list with the keyboard through its TUI. Both interfaces use the same saved data. This manual is in English; it does not change the language of messages displayed by the application.
 
@@ -233,6 +233,7 @@ tque --root 12
 
 - The value is a task ID or a title. Titles must match exactly, ignoring case and surrounding spaces; partial matches are not used. A numeric value matches both the task with that ID and tasks with that title. Completed tasks can be chosen.
 - Any task can be the root, not only a top-level one. The root appears at the top of the list at depth 0, followed by its descendants; ancestors above it are not shown. The header shows the path from the top-level task to the root and its ID.
+- The root and all of its descendants start expanded. You can still collapse and expand them with Left and Right.
 - If several tasks match, a selection screen lists each candidate with its ID, status, path, and progress. Enter opens the selected task, Esc opens the whole tree, and `q` quits. If nothing matches, the TUI does not start.
 - `a` adds a child of the root. Left on the root collapses it but does not move above it. The root follows renumbering. If the root is deleted, the TUI returns to the whole tree and says so.
 - Search, filters, and sorting apply within the root. The root cannot be changed inside the TUI; restart with another value.

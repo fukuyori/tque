@@ -399,9 +399,12 @@ func TestRootFocus(t *testing.T) {
 	if m.mode != "list" || m.rootID != 2 || m.selected != 2 {
 		t.Fatal(m.mode, m.rootID, m.selected)
 	}
-	// The root is expanded; its descendants keep the startup collapse.
-	if got := rowIDs(m); len(got) != 3 || got[0] != 2 || got[1] != 3 || got[2] != 5 || m.rows[0].Depth != 0 {
+	// The root and all its descendants are expanded.
+	if got := rowIDs(m); len(got) != 4 || got[0] != 2 || got[1] != 3 || got[2] != 4 || got[3] != 5 || m.rows[0].Depth != 0 {
 		t.Fatal("root view", got)
+	}
+	if !m.collapsed[1] || !m.collapsed[6] {
+		t.Fatal("tasks outside the root keep the startup collapse", m.collapsed)
 	}
 	lines := strings.Split(m.View().Content, "\n")
 	if !strings.HasPrefix(lines[0], "tque  起点: Blog > Design (#2)  保存先: D:/data") || strings.Contains(m.View().Content, "Blog  ") {
@@ -444,7 +447,7 @@ func TestRootFocus(t *testing.T) {
 		t.Fatal(e)
 	}
 	m.Update(m.read()())
-	if m.rootID != 0 || !strings.Contains(m.notice, "起点 #20 は削除されたため全体表示") || m.rows[0].ID != 1 {
+	if m.rootID != 0 || !strings.Contains(m.notice, "起点 #20 は削除されたため全体表示") || len(m.rows) != 2 || m.rows[0].ID != 1 || m.rows[1].ID != 6 {
 		t.Fatal(m.rootID, m.notice, rowIDs(m))
 	}
 	if strings.Contains(m.titleLine(), "起点") {
@@ -467,8 +470,8 @@ func TestRootChoiceOutcomes(t *testing.T) {
 	m = rootModel(t)
 	_ = m.chooseRoot("design")
 	press(m, "esc")
-	if m.mode != "list" || m.rootID != 0 || rowIDs(m)[0] != 1 {
-		t.Fatal("Esc should open the full tree", m.mode, m.rootID)
+	if got := rowIDs(m); m.mode != "list" || m.rootID != 0 || len(got) != 2 || got[0] != 1 || got[1] != 6 {
+		t.Fatal("Esc should open the full tree collapsed", m.mode, m.rootID, got)
 	}
 	m = rootModel(t)
 	_ = m.chooseRoot("design")
