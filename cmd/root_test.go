@@ -171,22 +171,26 @@ func TestRootOption(t *testing.T) {
 	if _, e := run(h, "ls", "--root", "missing"); ExitCode(e) != 1 || !strings.Contains(e.Error(), "NotFound") {
 		t.Fatal(e)
 	}
-	for _, args := range [][]string{{"ls", "--root", "  "}, {"--root", ""}, {"--root", "a\tb"}, {"add", "x", "--root", "1"}, {"done", "1", "--root", "1"}} {
+	for _, args := range [][]string{{"ls", "--root", "  "}, {"--root", ""}, {"--root", "a\tb"}, {"add", "x", "--root", "1"}, {"done", "1", "--root", "1"}, {"--collapse-done"}, {"--tui", "--collapse-done"}, {"ls", "--root", "1", "--collapse-done"}} {
 		if _, e := run(h, args...); ExitCode(e) != 2 {
 			t.Fatal(args, e)
 		}
 	}
 
 	var got string
-	c = New(Options{Version: "test", Home: func() (string, error) { return h, nil }, RunTUI: func(_ context.Context, _ engine.Service, _ string, root string) error {
-		got = root
-		return nil
-	}})
-	for _, args := range [][]string{{"--root", "  Blog "}, {"--tui", "--root", "Blog"}} {
-		got = ""
-		c.SetArgs(args)
-		if e := c.ExecuteContext(context.Background()); e != nil || got != "Blog" {
-			t.Fatal(args, got, e)
+	var gotCollapse bool
+	for _, tc := range []struct {
+		args     []string
+		collapse bool
+	}{{[]string{"--root", "  Blog "}, false}, {[]string{"--tui", "--root", "Blog"}, false}, {[]string{"--root", "Blog", "--collapse-done"}, true}, {[]string{"--collapse-done", "--tui", "--root", "Blog"}, true}} {
+		got, gotCollapse = "", !tc.collapse
+		c = New(Options{Version: "test", Home: func() (string, error) { return h, nil }, RunTUI: func(_ context.Context, _ engine.Service, _ string, root string, collapseDone bool) error {
+			got, gotCollapse = root, collapseDone
+			return nil
+		}})
+		c.SetArgs(tc.args)
+		if e := c.ExecuteContext(context.Background()); e != nil || got != "Blog" || gotCollapse != tc.collapse {
+			t.Fatal(tc.args, got, gotCollapse, e)
 		}
 	}
 

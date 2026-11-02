@@ -21,7 +21,8 @@ type Options struct {
 	Home    func() (string, error)
 	Now     func() time.Time
 	// RunTUI receives the normalized --root value, or "" for all tasks.
-	RunTUI func(ctx context.Context, s engine.Service, dataDir, root string) error
+	// collapseDone (--collapse-done) is only set together with a root.
+	RunTUI func(ctx context.Context, s engine.Service, dataDir, root string, collapseDone bool) error
 }
 type usageError struct{ error }
 
@@ -59,6 +60,7 @@ func New(o Options) *cobra.Command {
 	}
 	root.SetFlagErrorFunc(func(_ *cobra.Command, e error) error { return usage("%v", e) })
 	root.Flags().String("root", "", "起点タスクのIDまたはタイトル（その子孫だけを表示）")
+	root.Flags().Bool("collapse-done", false, "--rootと併用。完了したタスクの下を折り畳んで表示")
 	rootValue := func(c *cobra.Command) (string, error) {
 		if !c.Flags().Changed("root") {
 			return "", nil
@@ -89,6 +91,10 @@ func New(o Options) *cobra.Command {
 		if e != nil {
 			return e
 		}
+		collapseDone, _ := c.Flags().GetBool("collapse-done")
+		if collapseDone && rv == "" {
+			return usage("--collapse-done requires --root")
+		}
 		if o.RunTUI == nil {
 			return model.Err("InvalidInput", "TUI runner is unavailable")
 		}
@@ -96,7 +102,7 @@ func New(o Options) *cobra.Command {
 		if e != nil {
 			return e
 		}
-		return o.RunTUI(c.Context(), s, path, rv)
+		return o.RunTUI(c.Context(), s, path, rv, collapseDone)
 	}
 	root.PersistentPreRunE = func(c *cobra.Command, _ []string) error {
 		if forceTUI && c != root {

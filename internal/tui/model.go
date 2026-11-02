@@ -40,12 +40,14 @@ type Model struct {
 	noColor                        bool
 	// The --root task is tracked by internal identity so renumbering keeps it.
 	// rootID is its current display ID; 0 shows every task.
-	rootKey   string
-	rootID    int64
-	rootLost  string
-	pick      []int64
-	pickIndex int
-	pickValue string
+	rootKey  string
+	rootID   int64
+	rootLost string
+	// collapseDone (--collapse-done) closes completed parents when the root is set.
+	collapseDone bool
+	pick         []int64
+	pickIndex    int
+	pickValue    string
 	// External changes are detected from tasks.json's size and modification
 	// time; pending holds a newer document until the list is shown again.
 	stamp    fileStamp
@@ -87,7 +89,7 @@ type readMsg struct {
 }
 type dayMsg time.Time
 
-func Run(ctx context.Context, s engine.Service, dir, root string) error {
+func Run(ctx context.Context, s engine.Service, dir, root string, collapseDone bool) error {
 	if !term.IsTerminal(os.Stdin.Fd()) || !term.IsTerminal(os.Stdout.Fd()) {
 		return model.Err("InvalidInput", "TUI requires an interactive terminal")
 	}
@@ -100,6 +102,7 @@ func Run(ctx context.Context, s engine.Service, dir, root string) error {
 	m := New(s, dir, d)
 	m.ctx = ctx
 	m.stamp = stamp
+	m.collapseDone = collapseDone
 	if root != "" {
 		if e := m.chooseRoot(root); e != nil {
 			return e
@@ -134,7 +137,8 @@ func (m *Model) chooseRoot(raw string) error {
 }
 
 // setRoot opens the root and all its descendants expanded; tasks outside the
-// root keep the startup collapse.
+// root keep the startup collapse. With collapseDone, completed parents in the
+// root (the root included) stay collapsed.
 func (m *Model) setRoot(t model.Task) {
 	m.rootKey = t.InternalID
 	m.rootID = t.ID
@@ -149,6 +153,17 @@ func (m *Model) setRoot(t model.Task) {
 	}
 	for id := range open {
 		delete(m.collapsed, id)
+	}
+	if m.collapseDone {
+		done := map[int64]bool{}
+		for _, c := range m.doc.Tasks {
+			done[c.ID] = c.Status == "done"
+		}
+		for _, c := range m.doc.Tasks {
+			if c.ParentID != nil && open[*c.ParentID] && done[*c.ParentID] {
+				m.collapsed[*c.ParentID] = true
+			}
+		}
 	}
 	m.selected = t.ID
 	m.offset = 0

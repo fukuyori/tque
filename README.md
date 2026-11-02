@@ -102,7 +102,7 @@ Run `tque` without arguments, or use `tque --tui`, in an interactive terminal.
 
 Enter saves an attribute; Esc cancels. Empty date or dependency input clears it. In search input, Enter keeps the query and Esc restores the previous query. Esc in the task list clears only the search, keeping the filter.
 
-To manage several projects, put each project's tasks under a top-level task and start with `tque --root NAME_OR_ID` to show only that task and its descendants. Any task can be the root. If several titles match, the TUI asks which one to open. `tque ls --root NAME_OR_ID` limits a listing the same way.
+To manage several projects, put each project's tasks under a top-level task and start with `tque --root NAME_OR_ID` to show only that task and its descendants. Any task can be the root. If several titles match, the TUI asks which one to open. `tque ls --root NAME_OR_ID` limits a listing the same way. In the TUI, the root and its descendants start expanded; add `--collapse-done` to keep completed tasks collapsed.
 
 The TUI starts with every parent collapsed, showing only top-level tasks. Expanding a parent shows its immediate children; deeper parents stay collapsed. Reloading with `r` keeps your expanded/collapsed state.
 
@@ -133,12 +133,12 @@ The `test-and-package` workflow runs on branch pushes, `v*` tag pushes, pull req
 ZIP names use the version in `VERSION`:
 
 ```text
-tque-0.4.0-windows-amd64.zip
-tque-0.4.0-windows-arm64.zip
-tque-0.4.0-darwin-amd64.zip
-tque-0.4.0-darwin-arm64.zip
-tque-0.4.0-linux-amd64.zip
-tque-0.4.0-linux-arm64.zip
+tque-0.4.1-windows-amd64.zip
+tque-0.4.1-windows-arm64.zip
+tque-0.4.1-darwin-amd64.zip
+tque-0.4.1-darwin-arm64.zip
+tque-0.4.1-linux-amd64.zip
+tque-0.4.1-linux-arm64.zip
 ```
 
 `darwin` means macOS. Each ZIP contains a directory with the same base name, containing `tque.exe` on Windows or `tque` on macOS/Linux, both README languages, CHANGELOG, the complete docs directory (both manuals, design/review records, verification notes, checklists, and configuration examples), the application license, and dependency licenses. Unix executables are archived with execute permissions.
@@ -147,9 +147,9 @@ In GitHub, open **Actions → test-and-package → a successful run → Artifact
 
 ### Publish a version-tag release
 
-Push a tag named exactly as the contents of `VERSION`, such as `0.4.0`. Commit and push the intended source and workflow changes before tagging that commit. A mismatched tag is rejected before testing or packaging. The format is `MAJOR.MINOR.PATCH` without a `v` prefix; prerelease suffixes are not accepted.
+Push a tag named exactly as the contents of `VERSION`, such as `0.4.1`. Commit and push the intended source and workflow changes before tagging that commit. A mismatched tag is rejected before testing or packaging. The format is `MAJOR.MINOR.PATCH` without a `v` prefix; prerelease suffixes are not accepted.
 
-After all three OS test jobs and all six packaging jobs succeed, the release job downloads the artifacts from that same run, checks each ZIP and SHA256, and publishes a release titled `tque 0.4.0` with automatically generated notes. The assets are six ZIP files and six `.zip.sha256` files; download them directly from the repository's Releases page. These are application binaries, not signed installers.
+After all three OS test jobs and all six packaging jobs succeed, the release job downloads the artifacts from that same run, checks each ZIP and SHA256, and publishes a release titled `tque 0.4.1` with automatically generated notes. The assets are six ZIP files and six `.zip.sha256` files; download them directly from the repository's Releases page. These are application binaries, not signed installers.
 
 Only a **tag push** publishes a release. Branch pushes, pull requests, and manual workflow dispatch only build artifacts. The release job alone receives `contents: write` through the built-in `GITHUB_TOKEN`; no personal access token is needed. An existing release is not overwritten on reruns. If uploading fails, inspect the existing release/draft and assets before retrying. Tag creation and pushing remain explicit maintainer actions. See [GitHub CLI release creation](https://cli.github.com/manual/gh_release_create).
 

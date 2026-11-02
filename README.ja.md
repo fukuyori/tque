@@ -99,7 +99,7 @@ tque rm 1 --cascade
 
 属性入力はEnterで保存、Escで取消。日付・依存先の空欄は解除です。検索入力はEnterで条件を維持、Escで入力開始前へ戻ります。一覧のEscは検索だけを解除し、fの条件は維持します。
 
-複数のプロジェクトを管理するには、プロジェクトごとに最上位のタスクを作り、`tque --root 名前またはID`で起動すると、そのタスクと子孫だけを表示します。起点には任意のタスクを指定できます。同じタイトルが複数ある場合はTUIで選択します。`tque ls --root 名前またはID`でも同じ範囲に絞り込めます。
+複数のプロジェクトを管理するには、プロジェクトごとに最上位のタスクを作り、`tque --root 名前またはID`で起動すると、そのタスクと子孫だけを表示します。起点には任意のタスクを指定できます。同じタイトルが複数ある場合はTUIで選択します。`tque ls --root 名前またはID`でも同じ範囲に絞り込めます。TUIの起点表示では起点と子孫をすべて展開します。`--collapse-done`を併用すると、完了したタスクの下は折り畳んで表示します。
 
 TUIは子を持つタスクをすべて折り畳んだ状態で起動し、最上位のタスクだけを表示します。親を展開すると直下の子が表示され、さらに下の親は折り畳まれたままです。`r`で再読み込みしても開閉状態は維持されます。
 
@@ -128,12 +128,12 @@ Windowsの絶対パス例は`"D:/tque-data"`です。相対パスはconfig.json�
 `test-and-package`はブランチpush、`v*`タグのpush、pull request、手動実行で起動します。`VERSION`を検査し、Windows・macOS・Linuxでのテスト成功後、Ubuntu上で各OSのamd64／arm64向けに6種類のZIPを作成します。バージョンは`VERSION`から取得します。
 
 ```text
-tque-0.4.0-windows-amd64.zip
-tque-0.4.0-windows-arm64.zip
-tque-0.4.0-darwin-amd64.zip
-tque-0.4.0-darwin-arm64.zip
-tque-0.4.0-linux-amd64.zip
-tque-0.4.0-linux-arm64.zip
+tque-0.4.1-windows-amd64.zip
+tque-0.4.1-windows-arm64.zip
+tque-0.4.1-darwin-amd64.zip
+tque-0.4.1-darwin-arm64.zip
+tque-0.4.1-linux-amd64.zip
+tque-0.4.1-linux-arm64.zip
 ```
 
 `darwin`はmacOSです。ZIP内の同名ディレクトリに、アプリ本体（Windowsは`tque.exe`、macOS/Linuxは`tque`）、英語・日本語のREADME、CHANGELOG、docs全体（両言語の操作マニュアル・設計／レビュー記録・検証記録・チェックリスト・設定例）、LICENSE、依存ライセンスを同梱します。Unixの実行権限はZIP内に保持します。
@@ -142,9 +142,9 @@ GitHubの **Actions → test-and-package → 成功した実行 → Artifacts** 
 
 ### バージョンタグによるRelease公開
 
-`VERSION`の値と同じ名前のタグをpushします。例えば`0.4.0`です。先に公開対象のソースとワークフロー変更をコミット・pushし、そのコミットへタグを付けてください。タグとVERSIONが不一致なら、テストやパッケージ作成の前に停止します。形式は`v`を付けない`MAJOR.MINOR.PATCH`で、プレリリース用の接尾辞には対応しません。
+`VERSION`の値と同じ名前のタグをpushします。例えば`0.4.1`です。先に公開対象のソースとワークフロー変更をコミット・pushし、そのコミットへタグを付けてください。タグとVERSIONが不一致なら、テストやパッケージ作成の前に停止します。形式は`v`を付けない`MAJOR.MINOR.PATCH`で、プレリリース用の接尾辞には対応しません。
 
-3 OSのテストと6対象すべてのパッケージ作成に成功した後、同じ実行のArtifactsを取得してZIPとSHA256を確認し、`tque 0.4.0`というタイトルのReleaseを公開します。説明はGitHubが自動生成します。添付はZIP 6個と`.zip.sha256` 6個で、リポジトリのReleasesから直接取得できます。これらはアプリ本体であり、署名付きインストーラーではありません。
+3 OSのテストと6対象すべてのパッケージ作成に成功した後、同じ実行のArtifactsを取得してZIPとSHA256を確認し、`tque 0.4.1`というタイトルのReleaseを公開します。説明はGitHubが自動生成します。添付はZIP 6個と`.zip.sha256` 6個で、リポジトリのReleasesから直接取得できます。これらはアプリ本体であり、署名付きインストーラーではありません。
 
 公開するのは**タグのpush時だけ**です。ブランチpush・pull request・手動実行ではArtifactsの作成までに留めます。公開ジョブだけに組込み`GITHUB_TOKEN`の`contents: write`を付与し、個人アクセストークンは不要です。再実行しても既存Releaseを上書きしません。アップロードが失敗した場合は、残ったRelease／下書きと添付内容を確認してから再試行してください。タグの作成・pushは利用者が明示的に行います。[GitHub CLIのRelease作成仕様](https://cli.github.com/manual/gh_release_create)を参照しています。
 

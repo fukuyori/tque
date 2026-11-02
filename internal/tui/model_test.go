@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -452,6 +453,45 @@ func TestRootFocus(t *testing.T) {
 	}
 	if strings.Contains(m.titleLine(), "起点") {
 		t.Fatal(m.titleLine())
+	}
+}
+
+func TestRootCollapseDone(t *testing.T) {
+	setup := func(done ...int64) *Model {
+		m := rootModel(t)
+		m.collapseDone = true
+		for i := range m.doc.Tasks {
+			if slices.Contains(done, m.doc.Tasks[i].ID) {
+				m.doc.Tasks[i].Status = "done"
+			}
+		}
+		m.refresh()
+		return m
+	}
+	// A completed parent inside the root stays collapsed; the rest opens.
+	m := setup(3, 4)
+	if e := m.chooseRoot("2"); e != nil {
+		t.Fatal(e)
+	}
+	if got := rowIDs(m); len(got) != 3 || got[0] != 2 || got[1] != 3 || got[2] != 5 || !m.collapsed[3] {
+		t.Fatal("done subtree should be collapsed", got)
+	}
+	// A completed root shows only itself; expanding it keeps done parents closed.
+	m = setup(2, 3, 4, 5)
+	_ = m.chooseRoot("2")
+	if got := rowIDs(m); len(got) != 1 || got[0] != 2 {
+		t.Fatal("done root should be collapsed", got)
+	}
+	press(m, "right")
+	if got := rowIDs(m); len(got) != 3 || got[1] != 3 || got[2] != 5 {
+		t.Fatal(got)
+	}
+	// The root picker applies the same rule.
+	m = setup(3, 4)
+	_ = m.chooseRoot(" design ")
+	press(m, "enter")
+	if got := rowIDs(m); m.rootID != 2 || len(got) != 3 || got[1] != 3 || got[2] != 5 {
+		t.Fatal("picker should collapse done subtrees", m.rootID, got)
 	}
 }
 
