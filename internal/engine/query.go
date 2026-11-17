@@ -134,6 +134,9 @@ func Select(d model.Document, q Query) ([]View, int) {
 		}
 		return 0
 	}
+	// Dependencies come first; the selected sort orders unrelated rows.
+	rank := displayRanks(views, q.Tree, less)
+	less = func(a, b View) int { return rank[a.ID] - rank[b.ID] }
 	out := []View{}
 	if !q.Tree {
 		for id := range included {

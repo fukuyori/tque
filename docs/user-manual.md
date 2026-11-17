@@ -2,7 +2,7 @@
 
 [English](user-manual.md) | [日本語](user-manual.ja.md)
 
-Applies to tque 0.4.1.
+Applies to tque 0.5.0.
 
 tque is a terminal task manager. Use commands through its CLI or operate a task list with the keyboard through its TUI. Both interfaces use the same saved data. This manual is in English; it does not change the language of messages displayed by the application.
 
@@ -333,6 +333,13 @@ N must be between 0 and 36500. Dates do not include a time. If both dates exist,
 | --sort due | Due-date order; undated last, ID breaks ties |
 | --json | Output a JSON array |
 | --root VALUE | Only that task and its descendants. VALUE is an ID or exact title; if several tasks match, the command fails and lists them with their IDs |
+
+In every sort order, a task appears below the tasks it depends on. `--sort` decides the order of tasks that have no dependency between them. The TUI list follows the same rule.
+
+- `--tree` and the TUI reorder only tasks with the same parent, including top-level tasks. A task that depends on a sibling, or on a descendant of that sibling, appears below that sibling's branch.
+- A dependency held by a descendant does not move its parent. A dependency between children of different parents causes no reordering.
+- Sibling branches that depend on each other appear in `--sort` order.
+- A list without `--tree` has no hierarchy, so every dependency affects the order.
 
 ```text
 tque ls --all --tree

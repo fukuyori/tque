@@ -37,7 +37,8 @@ func TestCommands(t *testing.T) {
 	if e := json.Unmarshal([]byte(out), &rows); e != nil {
 		t.Fatal(out, e)
 	}
-	if len(rows) != 2 || rows[0]["effective_progress"] != float64(60) || rows[0]["blocked"] != true {
+	// 親 depends on 子, so the flat list shows 子 first.
+	if len(rows) != 2 || rows[0]["id"] != float64(2) || rows[1]["effective_progress"] != float64(60) || rows[1]["blocked"] != true {
 		t.Fatal(rows)
 	}
 	if strings.Contains(out, ": null") {
