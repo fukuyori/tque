@@ -692,6 +692,37 @@ func TestNoColorEnvironment(t *testing.T) {
 	}
 }
 
+func TestWarningNoticeIsColored(t *testing.T) {
+	m := testModel(t)
+	dependent, deps := "依存する側", []int64{1}
+	r, e := m.service.Execute(context.Background(), nil, engine.Request{Op: "add", Patch: engine.Patch{Title: &dependent, DepsSet: true, Deps: deps}})
+	if e != nil {
+		t.Fatal(e)
+	}
+	m.acceptDocument(r.Document)
+	m.refresh()
+	m.selected = 1
+	noticeLine := func() string {
+		lines := strings.Split(m.View().Content, "\n")
+		return lines[len(lines)-2]
+	}
+	// #1 is a dependency of #2, so the delete is refused.
+	press(m, "x")
+	if m.mode != "list" || !strings.HasPrefix(noticeLine(), "警告: ReferencedTask") {
+		t.Fatalf("plain warning: %s %q", m.mode, noticeLine())
+	}
+	m.noColor = false
+	if line := noticeLine(); !strings.Contains(line, "93") || !strings.HasPrefix(ansi.Strip(line), "警告: ReferencedTask") || ansi.StringWidth(line) > m.width {
+		t.Fatalf("colored warning: %q", line)
+	}
+	// An ordinary notice replaces the warning.
+	m.selected = 2
+	press(m, "x")
+	if line := noticeLine(); m.mode != "delete" || !strings.HasPrefix(line, "通知: #2") || strings.Contains(line, "\x1b") {
+		t.Fatalf("notice after warning: %s %q", m.mode, line)
+	}
+}
+
 func TestSortCycleIncludesName(t *testing.T) {
 	m := testModel(t)
 	m.doc.Tasks = []model.Task{{ID: 1, Title: "Zebra", Status: "todo"}, {ID: 2, Title: "Apple", Status: "todo"}}

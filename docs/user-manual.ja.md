@@ -2,7 +2,7 @@
 
 [English](user-manual.md) | [日本語](user-manual.ja.md)
 
-対象: tque 0.5.0
+対象: tque 0.5.1
 
 Windows版の対象はWindows 11です。インストーラーはビルド22000以上を要求し、Windows 10にはインストールできません。macOS用ファイル名の`darwin`はmacOSを表します。
 

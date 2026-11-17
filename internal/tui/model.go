@@ -36,8 +36,12 @@ type Model struct {
 	previousSearch                 string
 	busy, exitPending, uncertain   bool
 	notice                         string
-	page                           int
-	noColor                        bool
+	// warned is the notice text set by warn. The notice is a warning while it
+	// still starts with that text, so appended details keep the warning and
+	// any later plain notice clears it.
+	warned  string
+	page    int
+	noColor bool
 	// The --root task is tracked by internal identity so renumbering keeps it.
 	// rootID is its current display ID; 0 shows every task.
 	rootKey  string
@@ -252,7 +256,7 @@ func (m *Model) flushRootNotice() {
 		return
 	}
 	if m.notice == "" {
-		m.notice = m.rootLost
+		m.warn(m.rootLost)
 	} else {
 		m.notice += " / " + m.rootLost
 	}
@@ -340,6 +344,13 @@ func (m *Model) scrollFixed(delta int) {
 		return
 	}
 }
+
+// warn shows a refused or failed operation; View draws it as a warning.
+func (m *Model) warn(text string) {
+	m.notice = text
+	m.warned = text
+}
+func (m *Model) warning() bool { return m.warned != "" && strings.HasPrefix(m.notice, m.warned) }
 func (m *Model) begin(mode, value string) {
 	m.mode = mode
 	m.input.set(value)
@@ -348,7 +359,7 @@ func (m *Model) begin(mode, value string) {
 }
 func (m *Model) save(r engine.Request) tea.Cmd {
 	if m.uncertain {
-		m.notice = "保存結果が不明です。rで再読込し内容を確認してください"
+		m.warn("保存結果が不明です。rで再読込し内容を確認してください")
 		return nil
 	}
 	m.busy = true
@@ -402,7 +413,7 @@ func (m *Model) watched(msg watchMsg) {
 		// Keep the current view and retry on the next tick, reporting once.
 		if text := msg.err.Error(); text != m.watchErr {
 			m.watchErr = text
-			m.notice = "外部の変更を読み込めません: " + text
+			m.warn("外部の変更を読み込めません: " + text)
 		}
 		return
 	}
@@ -465,7 +476,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		exitPending := m.exitPending
 		m.exitPending = false
 		if msg.err != nil {
-			m.notice = msg.err.Error()
+			m.warn(msg.err.Error())
 			return m, nil
 		}
 		wasUncertain := m.uncertain
@@ -486,7 +497,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.busy = false
 		if msg.err != nil {
 			m.exitPending = false
-			m.notice = msg.err.Error()
+			m.warn(msg.err.Error())
 			var typed *model.Error
 			if errors.As(msg.err, &typed) && typed.Kind == "CommitUncertain" {
 				m.uncertain = true
@@ -678,7 +689,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				r, e := m.request()
 				if e != nil {
-					m.notice = e.Error()
+					m.warn(e.Error())
 					return m, nil
 				}
 				return m, m.save(r)
@@ -747,7 +758,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			v, ok := m.views[m.selected]
 			if !ok {
-				m.notice = "対象タスクがありません"
+				m.warn("対象タスクがありません")
 				return m, nil
 			}
 			switch k {
@@ -781,7 +792,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.save(engine.Request{Op: op, ID: v.ID})
 			case "+", "-":
 				if v.Status == "done" {
-					m.notice = "先にSpaceで未完了に戻してください"
+					m.warn("先にSpaceで未完了に戻してください")
 					return m, nil
 				}
 				n := 10
@@ -816,7 +827,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "x", "delete":
 				ids, e := engine.Removal(m.doc, v.ID, true)
 				if e != nil {
-					m.notice = e.Error()
+					m.warn(e.Error())
 					return m, nil
 				}
 				m.begin("delete", "")

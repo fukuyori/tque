@@ -139,7 +139,15 @@ func (m *Model) View() tea.View {
 				lines = append(lines, "")
 			}
 		}
-		lines = append(lines, strings.Repeat("-", m.width), "通知: "+safe(m.notice), m.footer())
+		notice := "通知: " + safe(m.notice)
+		if m.warning() {
+			// The label marks a warning without color; fit first so the style covers the whole line.
+			notice = fit("警告: "+safe(m.notice), m.width)
+			if !m.noColor {
+				notice = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11")).Render(notice)
+			}
+		}
+		lines = append(lines, strings.Repeat("-", m.width), notice, m.footer())
 	}
 	for i := range lines {
 		lines[i] = fit(lines[i], m.width)
