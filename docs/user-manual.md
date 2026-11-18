@@ -2,7 +2,7 @@
 
 [English](user-manual.md) | [日本語](user-manual.ja.md)
 
-Applies to tque 0.5.1.
+Applies to tque 0.5.2.
 
 tque is a terminal task manager. Use commands through its CLI or operate a task list with the keyboard through its TUI. Both interfaces use the same saved data. This manual is in English; it does not change the language of messages displayed by the application.
 
@@ -480,6 +480,8 @@ Consult the [storage and recovery design (Japanese)](https://github.com/fukuyori
 | UnsupportedSchema | Check application/data compatibility; do not manually change the schema number |
 | StorageFailure | Check the reported path, write permissions, free space, and other applications holding files open |
 | CommitUncertain / exit code 3 | The change may already be saved. Reload and inspect before retrying |
+
+If access is denied while saving (for example, a virus scanner or sync tool briefly holding a file open), tque retries automatically for about two seconds. `StorageFailure` or `CommitUncertain` is reported only if saving still fails.
 
 When the save result is uncertain, TUI updates are disabled. Press `r`, then inspect the list or details. Reloading does not automatically resend a draft. In the CLI use `ls --all` to check the result; take particular care not to duplicate an addition. If reloading also fails, preserve the error and storage files for diagnosis.
 

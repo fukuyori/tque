@@ -372,6 +372,66 @@ func TestReplacementFailurePreservesMainAndTemporaryFile(t *testing.T) {
 	}
 }
 
+func TestDeniedReplacementIsRetried(t *testing.T) {
+	denied := &os.LinkError{Op: "rename", Err: os.ErrPermission}
+	for _, tc := range []struct {
+		name     string
+		failures int // Denials of the tasks.json replacement before it is allowed.
+		want     string
+		calls    int
+	}{{"recovers", 2, "", 3}, {"gives up", 100, "CommitUncertain", 4}} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &Store{Dir: t.TempDir(), retryDelays: []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond}}
+			ctx := context.Background()
+			if _, err := svc(s).Execute(ctx, nil, addRequest("before")); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(s.Dir, "tasks.json")
+			before := readBytes(t, path)
+			calls := 0
+			s.replaceFile = func(from, to string) error {
+				if to == path {
+					if calls++; calls <= tc.failures {
+						return denied
+					}
+				}
+				return replace(from, to)
+			}
+			result, err := svc(s).Execute(ctx, nil, addRequest("after"))
+			if kind(err) != tc.want || calls != tc.calls {
+				t.Fatal(result, err, calls)
+			}
+			saved, err := Decode(readBytes(t, path))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.want == "" && (len(saved.Tasks) != 2 || !result.Changed) {
+				t.Fatal("retried replacement was not saved", saved, result)
+			}
+			if tc.want != "" && !bytes.Equal(before, readBytes(t, path)) {
+				t.Fatal("main changed")
+			}
+		})
+	}
+}
+
+func TestDeniedReplacementRetryStopsOnCancel(t *testing.T) {
+	s := &Store{Dir: t.TempDir(), retryDelays: []time.Duration{time.Hour}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	path := filepath.Join(s.Dir, "tasks.json")
+	s.replaceFile = func(from, to string) error {
+		if to == path {
+			cancel()
+			return os.ErrPermission
+		}
+		return replace(from, to)
+	}
+	if _, err := svc(s).Execute(ctx, nil, addRequest("blocked")); kind(err) != "CommitUncertain" {
+		t.Fatal(err)
+	}
+}
+
 func TestSavedResultSurvivesUnlockFailure(t *testing.T) {
 	s := &Store{Dir: t.TempDir(), fault: func(stage string) error {
 		if stage == "unlock" {

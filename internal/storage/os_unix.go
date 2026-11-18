@@ -17,6 +17,7 @@ func tryLock(f *os.File) (bool, error) {
 }
 func unlock(f *os.File) error       { return unix.Flock(int(f.Fd()), unix.LOCK_UN) }
 func replace(from, to string) error { return os.Rename(from, to) }
+func sharingViolation(error) bool   { return false }
 func syncDirectory(dir string) error {
 	f, e := os.Open(dir)
 	if e != nil {

@@ -79,7 +79,7 @@ TUIとCLIのツリー罫線・グループ間の空行を統一し、TUIに親�
 - [Go公式ダウンロード情報](https://go.dev/dl/?mode=json)で安定版Go 1.27.3を確認。toolchainに固定。Linuxツールチェーンの取得時に公開SHA256を照合した。システムのGoインストールは更新していない。
 - [Bubble Tea v2.1.0](https://github.com/charmbracelet/bubbletea/tree/v2.1.0)（MIT）、[Lip Gloss v2.0.6](https://github.com/charmbracelet/lipgloss/tree/v2.0.6)（MIT）、[Cobra v1.10.2](https://github.com/spf13/cobra/tree/v1.10.2)（Apache-2.0）。ソースとgo.modでAPI・Go要件を確認しビルドした。
 - Windowsは[LockFileEx](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-lockfileex)の排他・非ブロッキング取得、UnlockFileExを使用。Linux/macOSはgolang.org/x/sys/unix.Flockを使用。
-- Windows置換は[MoveFileExW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)のREPLACE_EXISTINGとWRITE_THROUGH。Unixはos.Renameと親ディレクトリSync。全OSで本体を先に削除しない。置換APIがエラーを返した場合は保守的にCommitUncertainとし、再試行しない。
+- Windows置換は[MoveFileExW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)のREPLACE_EXISTINGとWRITE_THROUGH。Unixはos.Renameと親ディレクトリSync。全OSで本体を先に削除しない。一時ファイルの作成と置換がアクセス拒否（Windowsでは共有違反・ロック違反を含む）で失敗した場合は、ファイルが変更されていないため最大7回・合計約2秒まで再試行する。それ以外のエラー、および再試行後も置換APIがエラーを返した場合は保守的にCommitUncertainとし、再試行しない。
 - GoのSync、WRITE_THROUGH、ディレクトリSyncは電源断耐性の実測ではない。特にWindowsのすべてのファイルシステム上の原子的可視性・永続性を保証したとは扱わない。全プロセスが本アプリのロック規約に従うローカル保存が前提。
 - [Inno Setup SignTool](https://jrsoftware.org/ishelp/topic_setup_signtool.htm)と[SignedUninstaller](https://jrsoftware.org/ishelp/topic_setup_signeduninstaller.htm)に従い、-Sign時に実行ファイルを先に署名し、Innoからインストーラー・アンインストーラー署名を呼び出す。
 - 推移依存のライセンスはMIT、BSD系、Apache-2.0等の原文を収集した。GoランタイムのLICENSEと、モジュールのLICENSE/COPYING/NOTICEを配布時に同梱する。リポジトリ内の収集記録はテスト用等を含むモジュールグラフ全体。0.2.1の配布物では対象OS・CPUの依存モジュールだけを収集し、実行ファイルと照合する。GPLアプリからのコード移植は行っていない。

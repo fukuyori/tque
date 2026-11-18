@@ -17,6 +17,11 @@ func tryLock(f *os.File) (bool, error) {
 func unlock(f *os.File) error {
 	return windows.UnlockFileEx(windows.Handle(f.Fd()), 0, 1, 0, &windows.Overlapped{})
 }
+
+// Another process holding the file open without sharing; cleared when it closes.
+func sharingViolation(err error) bool {
+	return errors.Is(err, windows.ERROR_SHARING_VIOLATION) || errors.Is(err, windows.ERROR_LOCK_VIOLATION)
+}
 func longPath(s string) string {
 	if strings.HasPrefix(s, `\\?\`) {
 		return s

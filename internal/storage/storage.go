@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
@@ -19,6 +20,39 @@ type Store struct {
 	Dir         string
 	fault       func(string) error
 	replaceFile func(string, string) error // Test seam for OS replacement failures.
+	retryDelays []time.Duration            // Test seam; nil uses defaultRetryDelays.
+}
+
+// Waits between attempts of a file operation that was denied access, about 2s
+// in total. Virus scanners, indexers and sync tools hold files only briefly.
+var defaultRetryDelays = []time.Duration{50 * time.Millisecond, 100 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond, 400 * time.Millisecond, 400 * time.Millisecond, 400 * time.Millisecond}
+
+func accessDenied(err error) bool {
+	return errors.Is(err, fs.ErrPermission) || sharingViolation(err)
+}
+
+// retryDenied repeats op while it fails with an access-denied error. Callers
+// must pass only operations that leave nothing changed when they are denied.
+func (s *Store) retryDenied(ctx context.Context, op func() error) error {
+	delays := s.retryDelays
+	if delays == nil {
+		delays = defaultRetryDelays
+	}
+	err := op()
+	for _, d := range delays {
+		if err == nil || !accessDenied(err) {
+			break
+		}
+		timer := time.NewTimer(d)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return err
+		case <-timer.C:
+		}
+		err = op()
+	}
+	return err
 }
 
 func (s *Store) fail(stage string) error {
@@ -242,18 +276,18 @@ func (s *Store) Update(ctx context.Context, expected *int64, mutate func(*model.
 				}
 			} else if !os.IsNotExist(err) {
 				return d, err
-			} else if _, err := s.atomic("tasks.schema2.backup", raw); err != nil {
+			} else if _, err := s.atomic(ctx, "tasks.schema2.backup", raw); err != nil {
 				return d, model.Err("StorageFailure", "migration backup failed: %v", err)
 			}
 		}
-		if _, e := s.atomic("tasks.json.backup", raw); e != nil {
+		if _, e := s.atomic(ctx, "tasks.json.backup", raw); e != nil {
 			return d, model.Err("StorageFailure", "backup failed; tasks.json unchanged: %v", e)
 		}
 	}
 	if e := ctx.Err(); e != nil {
 		return d, e
 	}
-	uncertain, e := s.atomic("tasks.json", b)
+	uncertain, e := s.atomic(ctx, "tasks.json", b)
 	if e != nil {
 		kind := "StorageFailure"
 		if uncertain {
@@ -265,7 +299,7 @@ func (s *Store) Update(ctx context.Context, expected *int64, mutate func(*model.
 	return next, nil
 }
 
-func (s *Store) atomic(name string, b []byte) (bool, error) {
+func (s *Store) atomic(ctx context.Context, name string, b []byte) (bool, error) {
 	path := filepath.Join(s.Dir, name)
 	tmp := path + ".tmp"
 	if st, e := os.Lstat(tmp); e == nil && !st.Mode().IsRegular() {
@@ -276,7 +310,11 @@ func (s *Store) atomic(name string, b []byte) (bool, error) {
 	if e := s.fail(name + ":open"); e != nil {
 		return false, e
 	}
-	f, e := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	var f *os.File
+	e := s.retryDenied(ctx, func() (err error) {
+		f, err = os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+		return
+	})
 	if e != nil {
 		return false, e
 	}
@@ -308,9 +346,11 @@ func (s *Store) atomic(name string, b []byte) (bool, error) {
 	if replaceFn == nil {
 		replaceFn = replace
 	}
-	if e = replaceFn(tmp, path); e != nil {
+	// A denied replacement leaves both files as they were, so it is retried.
+	// Any other failure is conservative: do not retry or remove tmp.
+	if e = s.retryDenied(ctx, func() error { return replaceFn(tmp, path) }); e != nil {
 		return true, e
-	} // Conservative: do not retry or remove tmp.
+	}
 	if e = s.fail(name + ":durability"); e == nil {
 		e = syncDirectory(s.Dir)
 	}
