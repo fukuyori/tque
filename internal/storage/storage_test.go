@@ -211,7 +211,7 @@ func TestSavedDocumentHasNoIDCounter(t *testing.T) {
 		t.Fatal(e)
 	}
 	b := readBytes(t, filepath.Join(s.Dir, "tasks.json"))
-	if bytes.Contains(b, []byte("next_id")) || !bytes.Contains(b, []byte(`"schema_version": 3`)) {
+	if bytes.Contains(b, []byte("next_id")) || !bytes.Contains(b, []byte(`"schema_version": 4`)) {
 		t.Fatal(string(b))
 	}
 }

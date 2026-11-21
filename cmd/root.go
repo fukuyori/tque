@@ -260,6 +260,39 @@ func New(o Options) *cobra.Command {
 		return nil
 	}
 	root.AddCommand(list)
+	show := &cobra.Command{Use: "show <id>", Short: "タスクの詳細と備考を表示", Args: func(_ *cobra.Command, a []string) error {
+		if len(a) != 1 {
+			return usage("exactly one argument is required")
+		}
+		return nil
+	}}
+	show.Flags().Bool("json", false, "json")
+	show.RunE = func(c *cobra.Command, a []string) error {
+		id, e := engine.ID(a[0])
+		if e != nil {
+			return usage("%v", e)
+		}
+		s, _, e := service()
+		if e != nil {
+			return e
+		}
+		d, e := s.Repo.Read(c.Context())
+		if e != nil {
+			return e
+		}
+		v, ok := engine.Views(d)[id]
+		if !ok {
+			return model.Err("NotFound", "task #%d", id)
+		}
+		if asJSON, _ := c.Flags().GetBool("json"); asJSON {
+			enc := json.NewEncoder(c.OutOrStdout())
+			enc.SetIndent("", "  ")
+			return enc.Encode(v)
+		}
+		_, e = fmt.Fprint(c.OutOrStdout(), formatDetail(v))
+		return e
+	}
+	root.AddCommand(show)
 	completion := &cobra.Command{Use: "completion <powershell|bash|zsh|fish>", Short: "シェル補完を生成", ValidArgs: []string{"powershell", "bash", "zsh", "fish"}, Args: func(_ *cobra.Command, a []string) error {
 		if len(a) != 1 {
 			return usage("specify one shell")
@@ -296,9 +329,11 @@ func attributeFlags(c *cobra.Command, edit bool) {
 	c.Flags().StringP("progress", "p", "", "0..100 または auto")
 	c.Flags().String("parent", "", "親ID")
 	c.Flags().StringArray("dep", nil, "依存ID（カンマ区切り・繰返し可）")
+	c.Flags().StringP("note", "n", "", "備考")
+	c.Flags().String("note-file", "", "備考を読み込むUTF-8ファイル（- は標準入力）")
 	_ = c.RegisterFlagCompletionFunc("progress", fixed("auto"))
 	if edit {
-		for _, f := range []string{"parent", "dep", "start", "due"} {
+		for _, f := range []string{"parent", "dep", "start", "due", "note"} {
 			_ = c.RegisterFlagCompletionFunc(f, fixed("none"))
 		}
 	}
@@ -351,10 +386,68 @@ func parsePatch(c *cobra.Command, add bool) (engine.Patch, error) {
 			}
 		}
 	}
-	if !add && p.Title == nil && p.Progress == nil && p.Start == nil && p.Due == nil && !p.ParentSet && !p.DepsSet {
+	if f.Changed("note") && f.Changed("note-file") {
+		return p, usage("--note and --note-file cannot be combined")
+	}
+	if f.Changed("note") {
+		v, _ := f.GetString("note")
+		if v == "none" {
+			if add {
+				return p, usage("none is only valid with edit")
+			}
+			v = ""
+		}
+		p.Note = &v
+	}
+	if f.Changed("note-file") {
+		v, e := readNoteFile(c)
+		if e != nil {
+			return p, e
+		}
+		p.Note = &v
+	}
+	if !add && p.Empty() {
 		return p, usage("edit requires at least one attribute flag")
 	}
 	return p, nil
+}
+
+// readNoteFile returns the text of --note-file; "-" reads standard input.
+func readNoteFile(c *cobra.Command) (string, error) {
+	path, _ := c.Flags().GetString("note-file")
+	var b []byte
+	var e error
+	if path == "-" {
+		b, e = io.ReadAll(c.InOrStdin())
+	} else {
+		b, e = os.ReadFile(path)
+	}
+	if e != nil {
+		return "", model.Err("InvalidInput", "read note file: %v", e)
+	}
+	return string(b), nil
+}
+
+// formatDetail is the output of show: the ls line, the attributes ls omits
+// and the note.
+func formatDetail(v engine.View) string {
+	parent := "なし"
+	if v.ParentID != nil {
+		parent = fmt.Sprintf("#%d", *v.ParentID)
+	}
+	deps := []string{}
+	for _, id := range v.DependsOn {
+		deps = append(deps, fmt.Sprintf("#%d", id))
+	}
+	if len(deps) == 0 {
+		deps = []string{"なし"}
+	}
+	s := FormatTask(v) + "\n"
+	s += fmt.Sprintf("開始: %s\n期日: %s\n親: %s\n依存: %s\n作成: %s\n完了: %s\n", v.StartDate, v.DueDate, parent, strings.Join(deps, ", "), v.CreatedAt, v.CompletedAt)
+	if v.Note != "" {
+		s += "\n備考:\n" + v.Note + "\n"
+	}
+	return s
 }
 
 func FormatTask(v engine.View) string {
@@ -368,6 +461,9 @@ func FormatTask(v engine.View) string {
 	}
 	if v.ProgressMode == "manual" {
 		s += " [manual]"
+	}
+	if v.Note != "" {
+		s += " [note]"
 	}
 	s += fmt.Sprintf(" [%s%s %d%%]", strings.Repeat("#", v.EffectiveProgress/10), strings.Repeat(".", 10-v.EffectiveProgress/10), v.EffectiveProgress)
 	if v.StartDate != "" || v.DueDate != "" {

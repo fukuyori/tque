@@ -27,6 +27,30 @@ func Title(s string) (string, error) {
 	return s, nil
 }
 
+// NoteLimit is the maximum number of code points in a stored note.
+const NoteLimit = 10000
+
+// Note returns the stored form of a note: LF line endings, no leading byte
+// order mark and no trailing whitespace. Line feeds and tabs are the only
+// control characters allowed. An empty result means the task has no note.
+func Note(s string) (string, error) {
+	if !utf8.ValidString(s) {
+		return "", model.Err("InvalidInput", "invalid UTF-8 note")
+	}
+	s = strings.TrimPrefix(s, "\xEF\xBB\xBF")
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	for _, r := range s {
+		if unicode.IsControl(r) && r != '\n' && r != '\t' {
+			return "", model.Err("InvalidInput", "note contains a control character other than line feed and tab")
+		}
+	}
+	s = strings.TrimRightFunc(s, unicode.IsSpace)
+	if n := utf8.RuneCountInString(s); n > NoteLimit {
+		return "", model.Err("InvalidInput", "note must contain at most %d code points, found %d", NoteLimit, n)
+	}
+	return s, nil
+}
+
 func ID(s string) (int64, error) {
 	if s == "" || strings.IndexFunc(s, func(r rune) bool { return r < '0' || r > '9' }) >= 0 {
 		return 0, model.Err("InvalidInput", "invalid ID %q", s)
@@ -89,6 +113,11 @@ func Validate(d model.Document) error {
 		}
 		if name != t.Title {
 			return model.Err("InvalidInput", "#%d title is not trimmed", t.ID)
+		}
+		if note, err := Note(t.Note); err != nil {
+			return err
+		} else if note != t.Note {
+			return model.Err("InvalidInput", "#%d note is not normalized", t.ID)
 		}
 		if t.Status != "todo" && t.Status != "done" {
 			return model.Err("InvalidInput", "#%d invalid status", t.ID)

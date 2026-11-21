@@ -14,7 +14,7 @@ type storedTask struct {
 	model.Task
 	Key string `json:"internal_id"`
 	// Shadow the embedded display-reference fields so they are never written.
-	// Decode separately rejects these legacy fields in schema 3.
+	// Decode separately rejects these legacy fields in schema 3 and later.
 	ParentID       *int64   `json:"parent_id,omitempty"`
 	DependsOn      []int64  `json:"depends_on,omitempty"`
 	ParentKey      string   `json:"parent_internal_id,omitempty"`
@@ -64,7 +64,9 @@ func decodeCurrent(data []byte) (model.Document, error) {
 	if err := strictjson.Decode(data, &stored); err != nil {
 		return model.Document{}, err
 	}
-	d := model.Document{SchemaVersion: stored.SchemaVersion, Revision: stored.Revision, Tasks: []model.Task{}}
+	// Schema 3 differs from the current schema only by lacking the note, so it
+	// is loaded as the current schema; Decode has already checked the version.
+	d := model.Document{SchemaVersion: model.SchemaVersion, Revision: stored.Revision, Tasks: []model.Task{}}
 	ids := map[string]int64{}
 	for _, t := range stored.Tasks {
 		if t.Key == "" || ids[t.Key] != 0 {

@@ -58,6 +58,9 @@ type Model struct {
 	watching bool
 	pending  *model.Document
 	watchErr string
+	// noteFile is the temporary file open in the external editor, or holding a
+	// note that is being saved; noteBefore is the note when editing started.
+	noteFile, noteBefore string
 }
 type fileStamp struct {
 	mod  time.Time
@@ -459,6 +462,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case watchMsg:
 		m.watched(msg)
 		return m, nil
+	case noteMsg:
+		return m, m.finishNote(msg)
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -507,7 +512,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				numbersChanged := m.acceptDocument(*msg.latest)
 				m.refresh()
 				m.revision = m.doc.Revision
-				if numbersChanged && m.mode != "search" {
+				if m.noteFile != "" {
+					// The note text is in the temporary file, not in the input line.
+				} else if numbersChanged && m.mode != "search" {
 					m.notice += " / 番号が変更されたため編集中止。入力案: " + m.input.text
 					m.mode = "list"
 				} else if _, ok := m.views[m.draftID]; !ok && m.mode != "add" && m.mode != "search" {
@@ -526,8 +533,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.refresh()
 				m.mode = "list"
 			}
+			m.noteSaved(msg.result.Changed)
 			return m, nil
 		}
+		m.noteSaved(true)
 		oldIndex := m.index()
 		id := msg.result.ID
 		m.acceptDocument(msg.result.Document)
@@ -824,6 +833,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					ids = append(ids, strconv.FormatInt(id, 10))
 				}
 				m.begin("deps", strings.Join(ids, ","))
+			case "n":
+				return m, m.startNote(v)
 			case "x", "delete":
 				ids, e := engine.Removal(m.doc, v.ID, true)
 				if e != nil {

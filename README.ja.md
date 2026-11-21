@@ -44,7 +44,7 @@ bash scripts/build-release.sh "$(go env GOOS)" "$(go env GOARCH)" ./.work/build
 
 実行ファイルをPATHの通った場所へ配置した場合の例です。例のIDは、追加時に表示された実際のIDに読み替えてください。
 
-表示用IDの付け直しは `tque renumber 8 6`（TUIでは `i`）で行います。変更先にタスクがあれば間の番号を1つずらし、親子・依存関係は固定の内部IDで維持します。schema 2のデータは読み込みだけでは書き換えず、初回の内容変更時に原本を `tasks.schema2.backup` に残してschema 3へ移行します。旧版はschema 3を読み込めません。
+表示用IDの付け直しは `tque renumber 8 6`（TUIでは `i`）で行います。変更先にタスクがあれば間の番号を1つずらし、親子・依存関係は固定の内部IDで維持します。保存形式はschema 4です。schema 2・3のデータは読み込みだけでは書き換えず、初回の内容変更時に原本を `tasks.schema2.backup` または `tasks.schema3.backup` に残してschema 4へ移行します。0.5.2以前はschema 4を読み込めません。
 
 ```text
 tque add "リリース準備" --due +7d
@@ -56,6 +56,9 @@ tque ls --due-today
 tque ls --ready --json
 tque edit 2 -p auto
 tque edit 2 --due none
+tque edit 2 --note "一行の備考"
+tque edit 2 --note-file memo.txt
+tque show 2
 tque done 2
 tque undone 2
 # 注意: 確認なしでタスク1とすべての子孫を削除
@@ -64,7 +67,8 @@ tque rm 1 --cascade
 
 - `ls`は未完了のみ、`--all`で全件。`--due-today`は今日までの期日（期限超過を含む）です。
 - `--dep 2,3 --dep 4`のように指定できます。編集時は依存先全体を置き換えます。
-- `edit --parent/--dep/--start/--due none`で解除します。
+- `edit --parent/--dep/--start/--due/--note none`で解除します。
+- 備考は複数行の文章で、最大10,000コードポイントです。`--note-file`はUTF-8のファイルを読み込み、`-`で標準入力を読み込みます。備考のあるタスクは`[note]`を表示し、`show ID`で全文を確認できます。
 - `--tree --json`、`--ready --blocked`の併用は引数エラーです。
 - 進捗100%だけでは完了になりません。親の完了は子へ伝播せず、親を完了にできるのは子孫がすべて完了している場合だけです。
 - 自動進捗は直下の子の表示進捗の平均です。`[manual]`は手動固定です。
@@ -86,6 +90,7 @@ tque rm 1 --cascade
 | Enter / Esc | 全文詳細を開く／戻る |
 | a / A | 親なしで追加／選択タスクの子を追加 |
 | e / s / d / p / l | タイトル／開始日／期日／進捗／依存先を編集 |
+| n | 備考を外部エディタで編集。保存してエディタを閉じると反映 |
 | i | 選択タスクの表示用IDを変更 |
 | Space | 完了・未完了を切替 |
 | + / - | 進捗を10ずつ変更し、手動固定 |
@@ -97,7 +102,7 @@ tque rm 1 --cascade
 | ? | 操作ヘルプ。保存先・最新通知の全文も確認可能 |
 | q / Ctrl+C | 終了。入力中のqは文字として入力 |
 
-属性入力はEnterで保存、Escで取消。日付・依存先の空欄は解除です。検索入力はEnterで条件を維持、Escで入力開始前へ戻ります。一覧のEscは検索だけを解除し、fの条件は維持します。
+属性入力はEnterで保存、Escで取消。日付・依存先の空欄は解除です。備考のエディタは環境変数`EDITOR`で指定します。未設定の場合はWindowsでは`notepad`、その他では`vi`です。備考の全文は全文詳細に表示します。検索入力はEnterで条件を維持、Escで入力開始前へ戻ります。一覧のEscは検索だけを解除し、fの条件は維持します。
 
 複数のプロジェクトを管理するには、プロジェクトごとに最上位のタスクを作り、`tque --root 名前またはID`で起動すると、そのタスクと子孫だけを表示します。起点には任意のタスクを指定できます。同じタイトルが複数ある場合はTUIで選択します。`tque ls --root 名前またはID`でも同じ範囲に絞り込めます。TUIの起点表示では起点と子孫をすべて展開します。`--collapse-done`を併用すると、完了したタスクの下は折り畳んで表示します。
 
@@ -128,12 +133,12 @@ Windowsの絶対パス例は`"D:/tque-data"`です。相対パスはconfig.json�
 `test-and-package`はブランチpush、`v*`タグのpush、pull request、手動実行で起動します。`VERSION`を検査し、Windows・macOS・Linuxでのテスト成功後、Ubuntu上で各OSのamd64／arm64向けに6種類のZIPを作成します。バージョンは`VERSION`から取得します。
 
 ```text
-tque-0.5.2-windows-amd64.zip
-tque-0.5.2-windows-arm64.zip
-tque-0.5.2-darwin-amd64.zip
-tque-0.5.2-darwin-arm64.zip
-tque-0.5.2-linux-amd64.zip
-tque-0.5.2-linux-arm64.zip
+tque-0.6.0-windows-amd64.zip
+tque-0.6.0-windows-arm64.zip
+tque-0.6.0-darwin-amd64.zip
+tque-0.6.0-darwin-arm64.zip
+tque-0.6.0-linux-amd64.zip
+tque-0.6.0-linux-arm64.zip
 ```
 
 `darwin`はmacOSです。ZIP内の同名ディレクトリに、アプリ本体（Windowsは`tque.exe`、macOS/Linuxは`tque`）、英語・日本語のREADME、CHANGELOG、docs全体（両言語の操作マニュアル・設計／レビュー記録・検証記録・チェックリスト・設定例）、LICENSE、依存ライセンスを同梱します。Unixの実行権限はZIP内に保持します。
@@ -142,9 +147,9 @@ GitHubの **Actions → test-and-package → 成功した実行 → Artifacts** 
 
 ### バージョンタグによるRelease公開
 
-`VERSION`の値と同じ名前のタグをpushします。例えば`0.5.2`です。先に公開対象のソースとワークフロー変更をコミット・pushし、そのコミットへタグを付けてください。タグとVERSIONが不一致なら、テストやパッケージ作成の前に停止します。形式は`v`を付けない`MAJOR.MINOR.PATCH`で、プレリリース用の接尾辞には対応しません。
+`VERSION`の値と同じ名前のタグをpushします。例えば`0.6.0`です。先に公開対象のソースとワークフロー変更をコミット・pushし、そのコミットへタグを付けてください。タグとVERSIONが不一致なら、テストやパッケージ作成の前に停止します。形式は`v`を付けない`MAJOR.MINOR.PATCH`で、プレリリース用の接尾辞には対応しません。
 
-3 OSのテストと6対象すべてのパッケージ作成に成功した後、同じ実行のArtifactsを取得してZIPとSHA256を確認し、`tque 0.5.2`というタイトルのReleaseを公開します。説明はGitHubが自動生成します。添付はZIP 6個と`.zip.sha256` 6個で、リポジトリのReleasesから直接取得できます。これらはアプリ本体であり、署名付きインストーラーではありません。
+3 OSのテストと6対象すべてのパッケージ作成に成功した後、同じ実行のArtifactsを取得してZIPとSHA256を確認し、`tque 0.6.0`というタイトルのReleaseを公開します。説明はGitHubが自動生成します。添付はZIP 6個と`.zip.sha256` 6個で、リポジトリのReleasesから直接取得できます。これらはアプリ本体であり、署名付きインストーラーではありません。
 
 公開するのは**タグのpush時だけ**です。ブランチpush・pull request・手動実行ではArtifactsの作成までに留めます。公開ジョブだけに組込み`GITHUB_TOKEN`の`contents: write`を付与し、個人アクセストークンは不要です。再実行しても既存Releaseを上書きしません。アップロードが失敗した場合は、残ったRelease／下書きと添付内容を確認してから再試行してください。タグの作成・pushは利用者が明示的に行います。[GitHub CLIのRelease作成仕様](https://cli.github.com/manual/gh_release_create)を参照しています。
 

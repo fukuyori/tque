@@ -17,6 +17,8 @@ type Task struct {
 	ProgressMode string  `json:"progress_mode"`
 	CreatedAt    string  `json:"created_at"`
 	CompletedAt  string  `json:"completed_at,omitempty"`
+	// Note is free multi-line text; see engine.Note for the stored form.
+	Note string `json:"note,omitempty"`
 }
 
 type Document struct {
@@ -25,9 +27,10 @@ type Document struct {
 	Tasks         []Task `json:"tasks"`
 }
 
-// SchemaVersion stores relationships using stable internal identities.
-// Storage also reads version 2 and migrates it on the next successful write.
-const SchemaVersion = 3
+// SchemaVersion 4 adds the task note to version 3, which stores relationships
+// using stable internal identities. Storage also reads versions 2 and 3 and
+// migrates them on the next successful write.
+const SchemaVersion = 4
 
 func Empty() Document { return Document{SchemaVersion: SchemaVersion, Tasks: []Task{}} }
 

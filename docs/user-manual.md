@@ -2,7 +2,7 @@
 
 [English](user-manual.md) | [日本語](user-manual.ja.md)
 
-Applies to tque 0.5.2.
+Applies to tque 0.6.0.
 
 tque is a terminal task manager. Use commands through its CLI or operate a task list with the keyboard through its TUI. Both interfaces use the same saved data. This manual is in English; it does not change the language of messages displayed by the application.
 
@@ -166,6 +166,7 @@ The initial view is a tree of all tasks. The header shows the data location and 
 | `[ ]` / `[x]` | Incomplete / completed |
 | `v` / `>` on a parent | Expanded / collapsed |
 | `[manual]` | Progress is set manually |
+| `[note]` | The task has a note |
 | `[context]` | Ancestor included to show the location of a matching child |
 | `!dep` | At least one dependency is incomplete |
 | `!` after a due date | Incomplete and overdue |
@@ -189,6 +190,7 @@ The layout is designed around 80 columns by 24 rows. Narrower or shorter termina
 | s / d | Edit start / due date |
 | p | Edit progress: 0–100 or auto |
 | l (lowercase L) | Edit dependencies, for example 2,3 |
+| n | Edit the note in an external editor |
 | Space | Toggle completed/incomplete |
 | + / - | Adjust progress by 10 and switch to manual mode |
 | x / Delete | Open deletion confirmation |
@@ -208,7 +210,14 @@ In an attribute input, Enter saves and Esc cancels. An empty start date, due dat
 
 Left/Right move the text cursor. Home/End or Ctrl+A/Ctrl+E move to the beginning/end. Backspace/Delete remove text. Characters such as `q`, `j`, `k`, and `?` are ordinary input while editing. Ctrl+C quits without saving unconfirmed input.
 
-Full details are read-only. Scroll with Up/Down, j/k, or PageUp/PageDown; Esc returns to the list. Pressing `q` in details quits the application. Close help with `?` or Esc.
+Press `n` to edit the note. tque writes the current note to a temporary file and opens it in an external editor. Edit the text, save it, and close the editor; the note is saved when the editor exits. Saving an empty file removes the note. Closing the editor without a change saves nothing. The TUI accepts no input while the editor is open.
+
+- The editor is taken from the `EDITOR` environment variable. Without it, `notepad` is used on Windows and `vi` elsewhere. Arguments are allowed, for example `code --wait`.
+- Use an editor that does not exit until you finish editing. An editor that returns immediately leaves the note unchanged, because tque reads the file before you edit it.
+- Save the temporary file as UTF-8.
+- If another process changed the data, or the text is not acceptable as a note, nothing is saved; the edited text stays in the temporary file and the notification shows its path. Press `?` to read the full notification.
+
+Full details are read-only and include the whole note. Scroll with Up/Down, j/k, or PageUp/PageDown; Esc returns to the list. Pressing `q` in details quits the application. Close help with `?` or Esc.
 
 Deletion confirmation shows the selected task ID and total number of tasks to remove, including hidden descendants; it does not list every descendant. Inspect the expanded tree before deleting. Press `y` to delete or `n`, `q`, Esc, or Enter to cancel. **There is no undo.** Deletion is refused if a task outside the deletion set depends on one of the tasks being removed.
 
@@ -260,6 +269,7 @@ If another process changed the data, the TUI reloads current data and preserves 
 | tque rm ID | Delete a task |
 | tque rm ID --cascade | Delete the task and all descendants |
 | tque ls | List incomplete tasks |
+| tque show ID | Show one task's attributes and note |
 
 CLI deletion has no interactive confirmation. Check `ls --all --tree` before deleting. A task with children requires `--cascade`. Dependencies from outside the deletion set prevent deletion even with `--cascade`.
 
@@ -279,7 +289,7 @@ In the TUI, select a task and press `i`, enter the new number, then press `Enter
 
 Renumbering includes completed, filtered-out, and collapsed tasks. Moving a parent's number does not move its descendants as a block. Parent and dependency relationships continue to refer to the same tasks. If another operation changes numbers while you are editing, the TUI reports a conflict and cancels the edit. Check the current numbers before retrying. Subsequent CLI commands also interpret numbers as current display IDs.
 
-Storage uses schema 3. Schema 2 data is migrated in memory on read and written as schema 3 on the first successful content change. Reads and no-op commands do not rewrite it. The original is retained as `tasks.schema2.backup`, separately from the rolling `tasks.json.backup`. An existing migration backup with different contents is not overwritten; saving stops instead. Older versions cannot read schema 3. Schema 1 remains unsupported. `ls --json` is a display-ID listing, not a replacement for the storage file.
+Storage uses schema 4, which adds the note to schema 3. Schema 2 and 3 data is migrated in memory on read and written as schema 4 on the first successful content change. Reads and no-op commands do not rewrite it. The original is retained as `tasks.schema2.backup` or `tasks.schema3.backup`, separately from the rolling `tasks.json.backup`. An existing migration backup with different contents is not overwritten; saving stops instead. Versions up to 0.5.2 cannot read schema 4 (`UnsupportedSchema`); use the migration backup to return to an older version. Schema 1 remains unsupported. `ls --json` is a display-ID listing, not a replacement for the storage file.
 
 
 ### Add and edit options
@@ -292,6 +302,8 @@ Storage uses schema 3. Schema 2 data is migrated in memory on read and written a
 | -p, --progress | 0–100 or auto |
 | --parent | Parent task ID |
 | --dep | Dependency IDs; comma-separated and repeatable |
+| -n, --note | Note |
+| --note-file | UTF-8 file to read the note from; `-` reads standard input |
 
 ```text
 tque add "Check behavior" --start today --due +3d -p 20
@@ -303,9 +315,30 @@ tque edit 3 --parent none --dep none --start none --due none
 
 Omitted attributes remain unchanged during `edit`. Editing dependencies replaces the entire list rather than appending to it. The dependency example sets IDs 2, 4, and 5; they must exist.
 
-Use `none` to clear parent, dependencies, start date, or due date with `edit` only. When adding a task, omit unwanted attributes. If one attribute in a multi-attribute edit is invalid, none of the changes are saved.
+Use `none` to clear parent, dependencies, start date, due date, or note with `edit` only. When adding a task, omit unwanted attributes. If one attribute in a multi-attribute edit is invalid, none of the changes are saved.
 
 Titles must contain 1–200 Unicode code points after trimming surrounding whitespace. Control characters, including tabs and newlines, are rejected. Quote titles that contain spaces.
+
+### Notes
+
+Each task can hold a note of multi-line text.
+
+```text
+tque add "Research" --note "A one-line note"
+tque edit 3 --note-file memo.txt
+Get-Content memo.txt -Raw | tque edit 3 --note-file -
+tque show 3
+tque edit 3 --note none
+```
+
+- `--note` stores its argument as given. Use `--note-file` for long or multi-line text. The two options cannot be combined.
+- The file given to `--note-file` must be UTF-8. `-` reads standard input. When piping non-ASCII text in PowerShell, the encoding follows `$OutputEncoding`.
+- A note holds up to 10,000 Unicode code points. Line feeds and tabs are allowed; other control characters are rejected.
+- On save, line endings become LF, and a leading byte order mark and trailing whitespace and line breaks are removed. Leading spaces on a line and blank lines inside the text are kept.
+- `edit --note none` removes the note, as does an empty file or an empty string. To store a note consisting only of the word `none`, use `--note-file`.
+- Tasks with a note are marked `[note]` in `ls` and in the TUI list.
+
+`tque show ID` prints the same line as `ls`, then the start date, due date, parent, dependencies, creation and completion times, and the whole note. With `--json`, the output has the same form as one element of `ls --json`.
 
 ### Dates
 
@@ -352,7 +385,7 @@ tque ls --all --blocked
 
 Conditions combine with AND. `--due-today`, `--overdue`, and `--ready` still select only incomplete tasks when combined with `--all`. A tree includes ancestors of matching children, so a completed parent can appear without `--all`. Tree sorting applies within sibling groups.
 
-Do not combine `--tree` with `--json`, or `--ready` with `--blocked`. JSON is a flat array containing task attributes plus `effective_progress`, `blocked`, and `blocked_by` (IDs of incomplete dependencies). `ls --json` includes only incomplete tasks by default. Use the actual storage document for a complete backup, not listing output.
+Do not combine `--tree` with `--json`, or `--ready` with `--blocked`. JSON is a flat array containing task attributes plus `effective_progress`, `blocked`, and `blocked_by` (IDs of incomplete dependencies). A task with a note also has `note`. `ls --json` includes only incomplete tasks by default. Use the actual storage document for a complete backup, not listing output.
 
 ### Results and exit codes
 
@@ -470,7 +503,7 @@ Consult the [storage and recovery design (Japanese)](https://github.com/fukuyori
 | A task is missing | CLI: ls --all. TUI: Esc to clear search and f to return to all. Check the data location |
 | Parent progress does not change | Check manual mode and completion. Use -p auto to enable automatic calculation |
 | ConfigError | Check the reported configuration path, JSON, key, and data path |
-| InvalidInput | Check title, dates, progress range, and start/due order |
+| InvalidInput | Check title, dates, progress range, start/due order, and the note's length, control characters, and encoding |
 | NotFound | Check IDs with ls --all |
 | CycleDetected | Check hierarchy or dependencies for cycles |
 | ReferencedTask | Inspect dependencies outside the deletion set; edit them appropriately before retrying |

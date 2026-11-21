@@ -250,6 +250,9 @@ func (m *Model) row(v engine.View) string {
 	if v.ProgressMode == "manual" {
 		tags += " [manual]"
 	}
+	if v.Note != "" {
+		tags += " [note]"
+	}
 	if v.Blocked {
 		tags += " !dep"
 	}
@@ -374,6 +377,9 @@ func (m *Model) summary() []string {
 	if v.ProgressMode == "manual" {
 		mode = " [manual]"
 	}
+	if v.Note != "" {
+		mode += "  備考:あり"
+	}
 	return []string{fmt.Sprintf("#%d %s%s", v.ID, safe(v.Title), context), fmt.Sprintf("状態:%s  進捗:%d%%%s  Enter:全文詳細", v.Status, v.EffectiveProgress, mode), fmt.Sprintf("開始:%s  期日:%s", v.StartDate, v.DueDate), m.relationship(v)}
 }
 func (m *Model) relationship(v engine.View) string {
@@ -412,7 +418,7 @@ func (m *Model) footer() string {
 func (m *Model) pageLines() []string {
 	var s string
 	if m.mode == "help" {
-		s = "移動\n上下/j/k:選択  左右:折り畳み・親子移動\nJ/K:選択位置固定で下/上へスクロール（空行は飛ばす）\nEnter:全文詳細  Esc:戻る\n\n追加・編集\na:親なしで追加  A:子として追加\ni:番号変更 e:タイトル s:開始日 d:期日 p:進捗 l:依存先\nSpace:完了/未完了  +/-:進捗±10（手動固定）\nx/Delete:削除確認 y:削除 n/Esc/Enter:取消\n\n検索・表示\n/:タイトル検索 Enter:条件保持 Esc:開始前へ\n入力中は左右:文字移動、Space・j/k・?:入力文字\n検索適用後は左右:表示上の親子移動\nf:全件→未完了→今日まで→期限超過→着手可能\no:ID順/期日順/名前順 r:データ再読込\n一覧のEscは検索だけ解除（表示条件は維持）\n[manual]:手動固定 [context]:文脈用祖先 !dep:依存待ち\n期日の!:未完了で期限超過\n\n終了\nq/Ctrl+C:終了。入力中のqは文字\n保存中のCtrl+C:成功後に終了、失敗時は画面に戻る\n\n"
+		s = "移動\n上下/j/k:選択  左右:折り畳み・親子移動\nJ/K:選択位置固定で下/上へスクロール（空行は飛ばす）\nEnter:全文詳細  Esc:戻る\n\n追加・編集\na:親なしで追加  A:子として追加\ni:番号変更 e:タイトル s:開始日 d:期日 p:進捗 l:依存先\nn:備考を外部エディタで編集（EDITOR、未設定時はnotepad/vi）。保存して閉じると反映\nSpace:完了/未完了  +/-:進捗±10（手動固定）\nx/Delete:削除確認 y:削除 n/Esc/Enter:取消\n\n検索・表示\n/:タイトル検索 Enter:条件保持 Esc:開始前へ\n入力中は左右:文字移動、Space・j/k・?:入力文字\n検索適用後は左右:表示上の親子移動\nf:全件→未完了→今日まで→期限超過→着手可能\no:ID順/期日順/名前順 r:データ再読込\n一覧のEscは検索だけ解除（表示条件は維持）\n[manual]:手動固定 [note]:備考あり [context]:文脈用祖先 !dep:依存待ち\n期日の!:未完了で期限超過\n\n終了\nq/Ctrl+C:終了。入力中のqは文字\n保存中のCtrl+C:成功後に終了、失敗時は画面に戻る\n\n"
 		if m.rootID != 0 {
 			s += fmt.Sprintf("起点\n%s (#%d)\n--root指定中は起点と子孫だけを表示。aは起点の子として追加\n\n", strings.Join(m.rootPath(m.rootID), " > "), m.rootID)
 		}
@@ -433,6 +439,12 @@ func (m *Model) pageLines() []string {
 		}
 		if len(v.DependsOn) == 0 {
 			s += "なし\n"
+		}
+		s += "\n備考\n"
+		if v.Note == "" {
+			s += "なし\n"
+		} else {
+			s += noteText(v.Note) + "\n"
 		}
 		s += "\n最新の通知\n" + safe(m.notice) + "\n\n保存先\n" + safe(m.dir)
 	}

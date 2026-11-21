@@ -22,11 +22,19 @@ type Service struct {
 }
 type Patch struct {
 	Title, Progress, Start, Due *string
-	ParentSet                   bool
-	Parent                      *int64
-	DepsSet                     bool
-	Deps                        []int64
+	// Note replaces the note; an empty value removes it.
+	Note      *string
+	ParentSet bool
+	Parent    *int64
+	DepsSet   bool
+	Deps      []int64
 }
+
+// Empty reports whether the patch changes no attribute.
+func (p Patch) Empty() bool {
+	return p.Title == nil && p.Progress == nil && p.Start == nil && p.Due == nil && p.Note == nil && !p.ParentSet && !p.DepsSet
+}
+
 type Request struct {
 	Op      string
 	ID      int64
@@ -133,8 +141,15 @@ func Apply(d *model.Document, r Request, now time.Time) (int64, []int64, error) 
 		return r.NewID, nil, nil
 	case "add", "edit":
 		p := r.Patch
-		if r.Op == "edit" && p.Title == nil && p.Progress == nil && p.Start == nil && p.Due == nil && !p.ParentSet && !p.DepsSet {
+		if r.Op == "edit" && p.Empty() {
 			return 0, nil, model.Err("InvalidInput", "no attributes specified")
+		}
+		if p.Note != nil {
+			v, e := Note(*p.Note)
+			if e != nil {
+				return 0, nil, e
+			}
+			t.Note = v
 		}
 		if p.Title != nil {
 			v, e := Title(*p.Title)

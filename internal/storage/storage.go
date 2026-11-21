@@ -76,7 +76,7 @@ func Decode(data []byte) (model.Document, error) {
 	if err := json.Unmarshal(raw["schema_version"], &schema); err != nil {
 		return bad(err)
 	}
-	if schema != model.SchemaVersion && schema != 2 {
+	if schema < 2 || schema > model.SchemaVersion {
 		return d, model.Err("UnsupportedSchema", "schema_version=%d", schema)
 	}
 	if err := strictjson.Required(data, "revision", "tasks"); err != nil {
@@ -96,13 +96,16 @@ func Decode(data []byte) (model.Document, error) {
 		} else {
 			allowed = append(allowed, "internal_id", "parent_internal_id", "depends_on_internal_ids")
 		}
+		if schema >= 4 {
+			allowed = append(allowed, "note")
+		}
 		if err := strictjson.Allowed(t, allowed...); err != nil {
 			return bad(err)
 		}
 		if err := strictjson.Required(t, "id", "title", "status", "progress", "progress_mode", "created_at"); err != nil {
 			return bad(fmt.Errorf("tasks[%d]: %w", i, err))
 		}
-		if schema == model.SchemaVersion {
+		if schema >= 3 {
 			if err := strictjson.Required(t, "internal_id"); err != nil {
 				return bad(err)
 			}
@@ -267,16 +270,17 @@ func (s *Store) Update(ctx context.Context, expected *int64, mutate func(*model.
 		var header struct {
 			SchemaVersion int `json:"schema_version"`
 		}
-		if json.Unmarshal(raw, &header) == nil && header.SchemaVersion == 2 {
+		if json.Unmarshal(raw, &header) == nil && header.SchemaVersion < model.SchemaVersion {
 			// Retain the migration source separately from the rolling backup.
-			path := filepath.Join(s.Dir, "tasks.schema2.backup")
+			name := fmt.Sprintf("tasks.schema%d.backup", header.SchemaVersion)
+			path := filepath.Join(s.Dir, name)
 			if existing, err := os.ReadFile(path); err == nil {
 				if !bytes.Equal(existing, raw) {
 					return d, model.Err("StorageFailure", "migration backup already exists with different contents: %s", path)
 				}
 			} else if !os.IsNotExist(err) {
 				return d, err
-			} else if _, err := s.atomic(ctx, "tasks.schema2.backup", raw); err != nil {
+			} else if _, err := s.atomic(ctx, name, raw); err != nil {
 				return d, model.Err("StorageFailure", "migration backup failed: %v", err)
 			}
 		}
