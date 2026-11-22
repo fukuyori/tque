@@ -107,6 +107,42 @@ func TestGoToID(t *testing.T) {
 	}
 }
 
+func TestScrollWhileSearching(t *testing.T) {
+	m := testModel(t)
+	m.doc.Tasks = nil
+	for id := int64(1); id <= 40; id++ {
+		m.doc.Tasks = append(m.doc.Tasks, model.Task{ID: id, Title: "linux", Status: "todo"})
+	}
+	m.refresh()
+	press(m, "/")
+	m.Update(tea.PasteMsg{Content: "linux"})
+	pos := m.input.pos
+	for i := 0; i < 20; i++ {
+		press(m, "down")
+	}
+	if m.selected != 21 || m.offset == 0 {
+		t.Fatalf("search results did not scroll: selected=%d offset=%d", m.selected, m.offset)
+	}
+	press(m, "up")
+	if m.selected != 20 {
+		t.Fatal(m.selected)
+	}
+	page := m.listHeight()
+	m.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	if m.selected != int64(20+page) {
+		t.Fatal(m.selected)
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
+	if m.selected != 20 || m.mode != "search" || m.search != "linux" || m.input.text != "linux" || m.input.pos != pos {
+		t.Fatal("navigation changed search input", m.selected, m.mode, m.input)
+	}
+	press(m, "enter")
+	press(m, "down")
+	if m.selected != 21 || m.mode != "list" || m.search != "linux" {
+		t.Fatal("navigation after confirming search", m.selected, m.mode, m.search)
+	}
+}
+
 func TestInputAndSearchModes(t *testing.T) {
 	m := testModel(t)
 	press(m, "/")
@@ -516,6 +552,50 @@ func TestRootFocus(t *testing.T) {
 	}
 	if strings.Contains(m.titleLine(), "起点") {
 		t.Fatal(m.titleLine())
+	}
+}
+
+func TestSearchStaysWithinRoot(t *testing.T) {
+	for _, root := range []string{"2", "design"} {
+		t.Run(root, func(t *testing.T) {
+			m := rootModel(t)
+			if err := m.chooseRoot(root); err != nil {
+				t.Fatal(err)
+			}
+			if m.mode == "pick" {
+				press(m, "enter")
+			}
+			check := func(want []int64, matches int) {
+				t.Helper()
+				if m.rootID != 2 || !slices.Equal(rowIDs(m), want) || m.matched != matches {
+					t.Fatalf("root=%d rows=%v matches=%d; want rows=%v matches=%d", m.rootID, rowIDs(m), m.matched, want, matches)
+				}
+			}
+			press(m, "/")
+			// Both #2 inside the root and #7 outside it have this title.
+			for _, char := range "design" {
+				press(m, string(char))
+				for _, row := range m.rows {
+					if row.ID < 2 || row.ID > 5 {
+						t.Fatalf("task outside root appeared while typing: %v", rowIDs(m))
+					}
+				}
+			}
+			check([]int64{2}, 1)
+			press(m, "enter")
+			check([]int64{2}, 1)
+			press(m, "esc")
+			check([]int64{2, 3, 4, 5}, 4)
+			press(m, "/")
+			m.Update(tea.PasteMsg{Content: "Work"})
+			check([]int64{}, 0)
+			press(m, "esc")
+			check([]int64{2, 3, 4, 5}, 4)
+			press(m, "/")
+			m.Update(tea.PasteMsg{Content: "Outline"})
+			// Ancestors are retained only as far as the selected root.
+			check([]int64{2, 3, 4}, 1)
+		})
 	}
 }
 

@@ -683,6 +683,22 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.editing() {
+			if m.mode == "search" {
+				switch k {
+				case "up":
+					m.move(-1)
+					return m, nil
+				case "down":
+					m.move(1)
+					return m, nil
+				case "pgup":
+					m.move(-m.listHeight())
+					return m, nil
+				case "pgdown":
+					m.move(m.listHeight())
+					return m, nil
+				}
+			}
 			if k == "esc" {
 				if m.mode == "search" {
 					m.search = m.previousSearch

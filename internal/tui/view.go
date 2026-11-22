@@ -335,7 +335,7 @@ func (m *Model) summary() []string {
 		case "goto":
 			hint = "タスク番号（正の整数） Enter:移動  Esc:取消"
 		case "search":
-			hint = "Enter:検索確定  Esc:開始前に戻す"
+			hint = "↑↓/PgUp/PgDn:結果移動  Enter:検索確定  Esc:開始前に戻す"
 		case "start", "due":
 			hint = "YYYY-MM-DD / today / +Nd / 空欄で解除"
 		case "progress":
