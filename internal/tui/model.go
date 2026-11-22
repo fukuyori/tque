@@ -692,6 +692,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if k == "enter" {
+				if m.mode == "goto" {
+					m.goToID()
+					return m, nil
+				}
 				if m.mode == "search" {
 					m.mode = "list"
 					return m, nil
@@ -741,6 +745,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "/":
 			m.previousSearch = m.search
 			m.begin("search", m.search)
+		case "g":
+			m.begin("goto", "")
 		case "esc":
 			m.search = ""
 			m.refresh()
@@ -850,11 +856,42 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 func (m *Model) editing() bool {
 	switch m.mode {
-	case "add", "child", "title", "start", "due", "progress", "deps", "search", "renumber":
+	case "add", "child", "title", "start", "due", "progress", "deps", "search", "renumber", "goto":
 		return true
 	}
 	return false
 }
+
+// goToID opens collapsed ancestors only when the target belongs to the current query.
+func (m *Model) goToID() {
+	id, err := engine.ID(m.input.text)
+	if err != nil {
+		m.warn("タスク番号は正の整数で入力してください")
+		return
+	}
+	v, ok := m.views[id]
+	if !ok {
+		m.warn(fmt.Sprintf("#%d は存在しません", id))
+		return
+	}
+	q := engine.Query{All: m.filter == 0, Tree: true, Search: m.search, Sort: m.sort, Today: m.today, DueToday: m.filter == 2, Overdue: m.filter == 3, Ready: m.filter == 4, Root: m.rootID}
+	rows, _ := engine.Select(m.doc, q)
+	for _, row := range rows {
+		if row.ID != id {
+			continue
+		}
+		for p := v.ParentID; p != nil; p = m.views[*p].ParentID {
+			delete(m.collapsed, *p)
+		}
+		m.selected = id
+		m.mode = "list"
+		m.refresh()
+		m.notice = fmt.Sprintf("#%d へ移動しました", id)
+		return
+	}
+	m.warn(fmt.Sprintf("#%d は現在の表示条件・起点の範囲外です", id))
+}
+
 func (m *Model) request() (engine.Request, error) {
 	r := engine.Request{Op: "edit", ID: m.draftID}
 	s := m.input.text

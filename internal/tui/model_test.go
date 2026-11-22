@@ -44,6 +44,69 @@ func key(s string) tea.KeyPressMsg {
 }
 func press(m *Model, s string) tea.Cmd { _, c := m.Update(key(s)); return c }
 
+func TestGoToID(t *testing.T) {
+	m := testModel(t)
+	parent := int64(1)
+	for i := 2; i <= 20; i++ {
+		title := fmt.Sprintf("child %d", i)
+		p := parent
+		r, err := m.service.Execute(context.Background(), nil, engine.Request{Op: "add", Patch: engine.Patch{Title: &title, ParentSet: true, Parent: &p}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		m.doc = r.Document
+		parent = r.ID
+	}
+	m.collapsed[1], m.collapsed[2] = true, true
+	m.refresh()
+	revision := m.doc.Revision
+	press(m, "g")
+	if m.mode != "goto" || !strings.Contains(m.View().Content, "番号へ移動") {
+		t.Fatal("missing jump prompt")
+	}
+	m.Update(tea.PasteMsg{Content: "20"})
+	if c := press(m, "enter"); c != nil {
+		t.Fatal("jump must not save")
+	}
+	if m.mode != "list" || m.selected != 20 || m.offset == 0 || m.collapsed[1] || m.collapsed[2] || m.doc.Revision != revision {
+		t.Fatalf("jump failed: selected=%d offset=%d mode=%s", m.selected, m.offset, m.mode)
+	}
+	for _, raw := range []string{"", "0", "-1", "abc", "999999999999999999999", "999"} {
+		press(m, "g")
+		m.input.set(raw)
+		press(m, "enter")
+		if m.mode != "goto" || m.selected != 20 || !m.warning() {
+			t.Fatalf("invalid target %q: %s", raw, m.notice)
+		}
+		press(m, "esc")
+	}
+	m.search = "child 20"
+	m.refresh()
+	press(m, "g")
+	m.input.set("19") // Context ancestors are selectable too.
+	press(m, "enter")
+	if m.selected != 19 || m.search != "child 20" {
+		t.Fatal("context jump failed")
+	}
+	m.search = "no matches"
+	m.refresh()
+	press(m, "g")
+	m.input.set("20")
+	press(m, "enter")
+	if m.mode != "goto" || m.search != "no matches" || !m.warning() {
+		t.Fatal("hidden target changed filters")
+	}
+	press(m, "esc")
+	m.search = ""
+	m.setRoot(m.doc.Tasks[1])
+	press(m, "g")
+	m.input.set("1")
+	press(m, "enter")
+	if m.mode != "goto" || m.rootID != 2 || m.selected != 2 {
+		t.Fatal("jump escaped root")
+	}
+}
+
 func TestInputAndSearchModes(t *testing.T) {
 	m := testModel(t)
 	press(m, "/")

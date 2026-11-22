@@ -325,13 +325,15 @@ func (m *Model) row(v engine.View) string {
 }
 func (m *Model) summary() []string {
 	if m.editing() {
-		label := map[string]string{"add": "新規（親なし）", "child": fmt.Sprintf("#%d の子を追加", m.draftID), "title": "タイトル", "renumber": "番号変更", "start": "開始日", "due": "期日", "progress": "進捗", "deps": "依存ID", "search": "タイトル検索"}[m.mode]
+		label := map[string]string{"add": "新規（親なし）", "child": fmt.Sprintf("#%d の子を追加", m.draftID), "title": "タイトル", "renumber": "番号変更", "goto": "番号へ移動", "start": "開始日", "due": "期日", "progress": "進捗", "deps": "依存ID", "search": "タイトル検索"}[m.mode]
 		line := safe(m.input.text[:m.input.pos]) + "|" + safe(m.input.text[m.input.pos:])
 		pos := ansi.StringWidth(safe(m.input.text[:m.input.pos]))
 		left := max(0, pos-(m.width-4))
 		line = ansi.Cut(line, left, left+m.width)
 		hint := "Enter:保存  Esc:取消"
 		switch m.mode {
+		case "goto":
+			hint = "タスク番号（正の整数） Enter:移動  Esc:取消"
 		case "search":
 			hint = "Enter:検索確定  Esc:開始前に戻す"
 		case "start", "due":
@@ -344,10 +346,10 @@ func (m *Model) summary() []string {
 			hint = "カンマ区切りID / 空欄で解除"
 		}
 		latest := ""
-		if v, ok := m.views[m.draftID]; ok && m.mode != "add" && m.mode != "search" {
+		if v, ok := m.views[m.draftID]; ok && m.mode != "add" && m.mode != "search" && m.mode != "goto" {
 			latest = fmt.Sprintf("最新: #%d %s / %d%% / %s -> %s", v.ID, safe(v.Title), v.EffectiveProgress, v.StartDate, v.DueDate)
 		}
-		if m.mode != "add" && m.mode != "search" && m.mode != "child" {
+		if m.mode != "add" && m.mode != "search" && m.mode != "goto" && m.mode != "child" {
 			label = fmt.Sprintf("%s (#%d)", label, m.draftID)
 		}
 		if m.mode == "child" && m.rootID != 0 && m.draftID == m.rootID {
@@ -411,14 +413,14 @@ func (m *Model) footer() string {
 		return "Enter:確定  Esc:取消  左右:文字移動"
 	}
 	if m.width < 60 {
-		return "a:追加 /:検索 f:条件 Enter:詳細 ?:他 q:終了"
+		return "a:追加 g:番号へ /:検索 f:条件 Enter:詳細 ?:他 q:終了"
 	}
-	return "↑↓:移動 ←→:階層 Space:完了 a:追加 /:検索 f:条件 Enter:詳細 ?:他 q:終了"
+	return "↑↓:移動 ←→:階層 Space:完了 a:追加 g:番号へ /:検索 f:条件 Enter:詳細 ?:他 q:終了"
 }
 func (m *Model) pageLines() []string {
 	var s string
 	if m.mode == "help" {
-		s = "移動\n上下/j/k:選択  左右:折り畳み・親子移動\nJ/K:選択位置固定で下/上へスクロール（空行は飛ばす）\nEnter:全文詳細  Esc:戻る\n\n追加・編集\na:親なしで追加  A:子として追加\ni:番号変更 e:タイトル s:開始日 d:期日 p:進捗 l:依存先\nn:備考を外部エディタで編集（EDITOR、未設定時はnotepad/vi）。保存して閉じると反映\nSpace:完了/未完了  +/-:進捗±10（手動固定）\nx/Delete:削除確認 y:削除 n/Esc/Enter:取消\n\n検索・表示\n/:タイトル検索 Enter:条件保持 Esc:開始前へ\n入力中は左右:文字移動、Space・j/k・?:入力文字\n検索適用後は左右:表示上の親子移動\nf:全件→未完了→今日まで→期限超過→着手可能\no:ID順/期日順/名前順 r:データ再読込\n一覧のEscは検索だけ解除（表示条件は維持）\n[manual]:手動固定 [note]:備考あり [context]:文脈用祖先 !dep:依存待ち\n期日の!:未完了で期限超過\n\n終了\nq/Ctrl+C:終了。入力中のqは文字\n保存中のCtrl+C:成功後に終了、失敗時は画面に戻る\n\n"
+		s = "移動\n上下/j/k:選択  左右:折り畳み・親子移動\nJ/K:選択位置固定で下/上へスクロール（空行は飛ばす）\ng:番号を入力してEnterで移動（折り畳まれた祖先は展開）\nEnter:全文詳細  Esc:戻る\n\n追加・編集\na:親なしで追加  A:子として追加\ni:番号変更 e:タイトル s:開始日 d:期日 p:進捗 l:依存先\nn:備考を外部エディタで編集（EDITOR、未設定時はnotepad/vi）。保存して閉じると反映\nSpace:完了/未完了  +/-:進捗±10（手動固定）\nx/Delete:削除確認 y:削除 n/Esc/Enter:取消\n\n検索・表示\n/:タイトル検索 Enter:条件保持 Esc:開始前へ\n入力中は左右:文字移動、Space・j/k・?:入力文字\n検索適用後は左右:表示上の親子移動\nf:全件→未完了→今日まで→期限超過→着手可能\no:ID順/期日順/名前順 r:データ再読込\n一覧のEscは検索だけ解除（表示条件は維持）\n[manual]:手動固定 [note]:備考あり [context]:文脈用祖先 !dep:依存待ち\n期日の!:未完了で期限超過\n\n終了\nq/Ctrl+C:終了。入力中のqは文字\n保存中のCtrl+C:成功後に終了、失敗時は画面に戻る\n\n"
 		if m.rootID != 0 {
 			s += fmt.Sprintf("起点\n%s (#%d)\n--root指定中は起点と子孫だけを表示。aは起点の子として追加\n\n", strings.Join(m.rootPath(m.rootID), " > "), m.rootID)
 		}
