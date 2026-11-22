@@ -143,6 +143,40 @@ func TestScrollWhileSearching(t *testing.T) {
 	}
 }
 
+func TestToggleCompletedVisibility(t *testing.T) {
+	m := rootModel(t)
+	if err := m.chooseRoot("2"); err != nil {
+		t.Fatal(err)
+	}
+	m.doc.Tasks[2].Status = "done"
+	m.search, m.sort = "Draft", "name"
+	m.refresh()
+	press(m, "c")
+	if m.filter != 1 || len(m.rows) != 0 || m.matched != 0 {
+		t.Fatal("completed match still visible", m.filter, rowIDs(m))
+	}
+	press(m, "c")
+	if m.filter != 0 || !slices.Equal(rowIDs(m), []int64{2, 3}) || m.matched != 1 {
+		t.Fatal("completed match not restored", m.filter, rowIDs(m))
+	}
+	if m.rootID != 2 || m.search != "Draft" || m.sort != "name" {
+		t.Fatal("toggle changed root, search, or sort")
+	}
+	for filter := 2; filter <= 4; filter++ {
+		m.filter = filter
+		m.refresh()
+		press(m, "c")
+		if m.filter != 0 || m.matched != 1 {
+			t.Fatal("toggle should restore all tasks", filter, m.filter, m.matched)
+		}
+	}
+	press(m, "/")
+	press(m, "c")
+	if m.input.text != "Draftc" || m.filter != 0 {
+		t.Fatal("c must remain text while searching", m.input.text, m.filter)
+	}
+}
+
 func TestInputAndSearchModes(t *testing.T) {
 	m := testModel(t)
 	press(m, "/")

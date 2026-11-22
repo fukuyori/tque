@@ -193,6 +193,7 @@ func New(o Options) *cobra.Command {
 		list.Flags().Bool(f, false, f)
 	}
 	list.Flags().String("search", "", "タイトルの部分一致検索")
+	list.Flags().Bool("hide-done", false, "完了タスクを除外（--allより優先）")
 	list.Flags().String("root", "", "起点タスクのIDまたはタイトル（その子孫だけを表示）")
 	list.Flags().String("sort", "id", "id、due または name")
 	_ = list.RegisterFlagCompletionFunc("sort", fixed("id", "due", "name"))
@@ -200,6 +201,9 @@ func New(o Options) *cobra.Command {
 		b := func(n string) bool { v, _ := c.Flags().GetBool(n); return v }
 		str := func(n string) string { v, _ := c.Flags().GetString(n); return v }
 		q := engine.Query{All: b("all"), Tree: b("tree"), Blocked: b("blocked"), DueToday: b("due-today"), Overdue: b("overdue"), Ready: b("ready"), Search: str("search"), Sort: str("sort"), Today: o.Now().Format(time.DateOnly)}
+		if b("hide-done") {
+			q.All = false
+		}
 		if q.Tree && b("json") {
 			return usage("--tree and --json cannot be combined")
 		}

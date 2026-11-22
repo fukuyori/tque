@@ -769,6 +769,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "f":
 			m.filter = (m.filter + 1) % 5
 			m.refresh()
+		case "c":
+			if m.filter == 0 {
+				m.filter = 1
+			} else {
+				m.filter = 0
+			}
+			m.refresh()
 		case "o":
 			if m.sort == "id" {
 				m.sort = "due"

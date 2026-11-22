@@ -22,6 +22,31 @@ func run(home string, args ...string) (string, error) {
 	e := c.ExecuteContext(context.Background())
 	return b.String(), e
 }
+func TestListHideDone(t *testing.T) {
+	h := t.TempDir()
+	for _, args := range [][]string{{"add", "linux pending"}, {"add", "linux completed"}, {"done", "2"}} {
+		if out, err := run(h, args...); err != nil {
+			t.Fatal(out, err)
+		}
+	}
+	for _, args := range [][]string{
+		{"ls", "--hide-done"},
+		{"ls", "--all", "--hide-done"},
+		{"ls", "--hide-done", "--all", "--tree", "--search", "linux"},
+		{"ls", "--all", "--hide-done", "--root", "2"},
+	} {
+		out, err := run(h, args...)
+		if err != nil || strings.Contains(out, "linux completed") {
+			t.Fatal(args, out, err)
+		}
+	}
+	out, err := run(h, "ls", "--all", "--hide-done", "--json")
+	var rows []engine.View
+	if err != nil || json.Unmarshal([]byte(out), &rows) != nil || len(rows) != 1 || rows[0].ID != 1 {
+		t.Fatal(out, err)
+	}
+}
+
 func TestCommands(t *testing.T) {
 	h := t.TempDir()
 	for _, args := range [][]string{{"add", "親", "--due", "today"}, {"add", "子", "--parent", "1", "-p", "60"}, {"edit", "1", "--dep", "2"}, {"done", "2"}, {"done", "1"}, {"undone", "1"}, {"undone", "2"}, {"edit", "2", "-p", "60"}} {

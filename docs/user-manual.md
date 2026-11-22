@@ -196,6 +196,7 @@ The layout is designed around 80 columns by 24 rows. Narrower or shorter termina
 | x / Delete | Open deletion confirmation |
 | / | Start a title search |
 | f | Cycle all → incomplete → due through today → overdue → ready → all |
+| c | Toggle completed tasks (all ↔ incomplete; other filters switch to all) |
 | o | Cycle ID → due date → name → ID |
 | Esc | Clear search; keep the filter selected with f |
 | r | Reload saved task data |
@@ -355,6 +356,7 @@ N must be between 0 and 36500. Dates do not include a time. If both dates exist,
 | Option | Effect |
 | --- | --- |
 | --all | Include completed tasks |
+| --hide-done | Exclude completed tasks explicitly (the default); overrides --all |
 | --tree | Display the hierarchy |
 | --search "text" | Match a substring in titles |
 | --blocked | Tasks with incomplete dependencies |
